@@ -1,0 +1,89 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd" >
+
+<mapper namespace="com.shelfflow.services.user.auth.persistence.UserAccountPersistenceMapper">
+
+    <select id="findByOpenId" resultType="com.shelfflow.services.user.auth.persistence.dataobject.UserAccountDataObject">
+        select
+            id,
+            openid as openId,
+            name,
+            phone,
+            password_hash as passwordHash,
+            status,
+            create_time as createTime,
+            update_time as updateTime
+        from user
+        where openid = #{openId}
+        limit 1
+    </select>
+
+    <select id="findById" resultType="com.shelfflow.services.user.auth.persistence.dataobject.UserAccountDataObject">
+        select
+            id,
+            openid as openId,
+            name,
+            phone,
+            password_hash as passwordHash,
+            status,
+            create_time as createTime,
+            update_time as updateTime
+        from user
+        where id = #{id}
+    </select>
+
+    <select id="findByOpenIdAndPhone" resultType="com.shelfflow.services.user.auth.persistence.dataobject.UserAccountDataObject">
+        select
+            id,
+            openid as openId,
+            name,
+            phone,
+            password_hash as passwordHash,
+            status,
+            create_time as createTime,
+            update_time as updateTime
+        from user
+        where openid = #{openId}
+          and phone = #{phone}
+        limit 1
+    </select>
+
+    <insert id="insert" parameterType="com.shelfflow.services.user.auth.persistence.dataobject.UserAccountDataObject"
+            useGeneratedKeys="true" keyProperty="id">
+        insert into user(
+            openid,
+            name,
+            phone,
+            password_hash,
+            status,
+            create_time,
+            update_time
+        ) values (
+            #{openId},
+            #{name},
+            #{phone},
+            #{passwordHash},
+            #{status},
+            #{createTime},
+            #{updateTime}
+        )
+    </insert>
+
+    <update id="updateProfile" parameterType="com.shelfflow.services.user.auth.persistence.dataobject.UserAccountDataObject">
+        update user
+        set
+            name = #{name},
+            phone = #{phone},
+            update_time = #{updateTime}
+        where id = #{id}
+    </update>
+
+    <update id="updatePasswordById" parameterType="com.shelfflow.services.user.auth.persistence.dataobject.UserAccountDataObject">
+        update user
+        set
+            password_hash = #{passwordHash},
+            update_time = #{updateTime}
+        where id = #{id}
+    </update>
+</mapper>

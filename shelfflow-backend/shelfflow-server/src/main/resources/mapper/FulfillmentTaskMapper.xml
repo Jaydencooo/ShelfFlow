@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd" >
+
+<mapper namespace="com.shelfflow.mapper.FulfillmentTaskMapper">
+    <insert id="upsert" parameterType="com.shelfflow.entity.FulfillmentTask">
+        insert into fulfillment_task(order_id, order_number, pickup_code, status, pickup_deadline, completed_time, create_time, update_time)
+        values (#{orderId}, #{orderNumber}, #{pickupCode}, #{status}, #{pickupDeadline}, #{completedTime}, #{createTime}, #{updateTime})
+        on duplicate key update
+            order_number = values(order_number),
+            pickup_code = values(pickup_code),
+            pickup_deadline = values(pickup_deadline),
+            update_time = values(update_time)
+    </insert>
+
+    <update id="updateByOrderId" parameterType="com.shelfflow.entity.FulfillmentTask">
+        update fulfillment_task
+        <set>
+            <if test="status != null">status = #{status},</if>
+            <if test="completedTime != null">completed_time = #{completedTime},</if>
+            <if test="updateTime != null">update_time = #{updateTime},</if>
+        </set>
+        where order_id = #{orderId}
+    </update>
+
+    <select id="pageQuery" resultType="com.shelfflow.vo.FulfillmentTaskVO">
+        select
+            t.*,
+            o.status as orderStatus,
+            o.amount,
+            o.phone,
+            o.consignee,
+            o.remark
+        from fulfillment_task t
+        left join orders o on t.order_id = o.id
+        <where>
+            <if test="orderNumber != null and orderNumber != ''">and t.order_number = #{orderNumber}</if>
+            <if test="phone != null and phone != ''">and o.phone like concat('%', #{phone}, '%')</if>
+            <if test="status != null">and t.status = #{status}</if>
+            <if test="beginTime != null">and t.create_time &gt;= #{beginTime}</if>
+            <if test="endTime != null">and t.create_time &lt;= #{endTime}</if>
+        </where>
+        order by t.create_time desc, t.id desc
+    </select>
+</mapper>

@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd" >
+
+<mapper namespace="com.shelfflow.mapper.LossStatsMapper">
+    <select id="overview" resultType="com.shelfflow.vo.LossStatsVO">
+        select
+            coalesce(sum(case
+                when expiration_time &lt; now() or status = 3 then 1
+                else 0
+            end), 0) as expiredBatchCount,
+            coalesce(sum(case
+                when expiration_time &lt; now() or status = 3
+                    then greatest(stock_quantity - locked_quantity - sold_quantity, 0)
+                else 0
+            end), 0) as expiredStockQuantity,
+            coalesce(sum(case
+                when expiration_time &gt;= now()
+                    and expiration_time &lt; date_add(now(), interval 3 day)
+                    and status != 2
+                    and greatest(stock_quantity - locked_quantity - sold_quantity, 0) &gt; 0
+                    then 1
+                else 0
+            end), 0) as expiringSoonBatchCount,
+            coalesce(sum(case
+                when expiration_time &gt;= now()
+                    and expiration_time &lt; date_add(now(), interval 3 day)
+                    and status != 2
+                    then greatest(stock_quantity - locked_quantity - sold_quantity, 0)
+                else 0
+            end), 0) as expiringSoonStockQuantity,
+            coalesce(sum(case
+                when status = 2 or stock_quantity &lt;= sold_quantity then 1
+                else 0
+            end), 0) as soldOutBatchCount
+        from inventory_batch
+    </select>
+</mapper>

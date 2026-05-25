@@ -1,0 +1,32 @@
+spring:
+  datasource:
+    url: jdbc:h2:mem:shelfflow-user;MODE=MySQL;DB_CLOSE_DELAY=-1;DATABASE_TO_LOWER=TRUE
+    driver-class-name: org.h2.Driver
+    username: sa
+    password:
+  sql:
+    init:
+      mode: always
+      schema-locations: classpath:db/test/schema.sql
+      data-locations: classpath:db/test/data.sql
+  cloud:
+    nacos:
+      discovery:
+        enabled: false
+
+mybatis:
+  mapper-locations: classpath:/mapper/*.xml
+  configuration:
+    map-underscore-to-camel-case: true
+
+shelfflow:
+  runtime:
+    app-name: shelfflow-user-service-test
+    app-env: test
+    log-level: INFO
+    api-prefix: /api
+    cors-allowed-origins:
+      - http://127.0.0.1:3000
+  jwt:
+    secret: test-secret
+    expires-in: PT12H

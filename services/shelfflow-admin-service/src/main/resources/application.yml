@@ -1,0 +1,58 @@
+server:
+  port: ${APP_PORT:${SHELFFLOW_ADMIN_SERVICE_PORT:4012}}
+
+spring:
+  application:
+    name: ${APP_NAME:shelfflow-admin-service}
+  datasource:
+    url: jdbc:mysql://${DB_HOST:127.0.0.1}:${DB_PORT:3306}/${DB_NAME:shelfflow}?useUnicode=true&characterEncoding=UTF-8&serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true
+    username: ${DB_USER:root}
+    password: ${DB_PASSWORD:}
+    driver-class-name: com.mysql.cj.jdbc.Driver
+  cloud:
+    nacos:
+      discovery:
+        enabled: ${SHELFFLOW_NACOS_ENABLED:false}
+        server-addr: ${SHELFFLOW_NACOS_SERVER_ADDR:127.0.0.1:8848}
+
+mybatis:
+  mapper-locations: classpath:/mapper/*.xml
+  configuration:
+    map-underscore-to-camel-case: true
+
+shelfflow:
+  runtime:
+    app-name: ${APP_NAME:shelfflow-admin-service}
+    app-env: ${APP_ENV:development}
+    log-level: ${LOG_LEVEL:INFO}
+    api-prefix: ${API_PREFIX:/api}
+    cors-allowed-origins: ${CORS_ALLOWED_ORIGINS:http://127.0.0.1:3000}
+  jwt:
+    secret: ${JWT_SECRET:dev-shelfflow-jwt-secret-change-me}
+    expires-in: ${JWT_EXPIRES_IN:PT12H}
+  legacy:
+    base-url: ${SHELFFLOW_LEGACY_BACKEND_BASE_URL:http://127.0.0.1:8082}
+  admin:
+    loss-stats:
+      expiring-soon-days: ${LOSS_STATS_EXPIRING_SOON_DAYS:3}
+      suggestion-limit: ${LOSS_STATS_SUGGESTION_LIMIT:8}
+      estimated-cost-rate: ${LOSS_STATS_ESTIMATED_COST_RATE:0.65}
+      operating-expense-amount: ${LOSS_STATS_OPERATING_EXPENSE_AMOUNT:0}
+    ai-ops:
+      provider: ${AI_OPS_PROVIDER:local}
+      model: ${AI_OPS_MODEL:shelfflow-rules-v1}
+      api-key: ${AI_OPS_API_KEY:}
+      base-url: ${AI_OPS_BASE_URL:}
+      chat-completions-path: ${AI_OPS_CHAT_COMPLETIONS_PATH:/v1/chat/completions}
+      request-timeout-seconds: ${AI_OPS_REQUEST_TIMEOUT_SECONDS:20}
+      max-tokens: ${AI_OPS_MAX_TOKENS:1200}
+      temperature: ${AI_OPS_TEMPERATURE:0.2}
+      suggestion-limit: ${AI_OPS_SUGGESTION_LIMIT:20}
+      retrieval-limit: ${AI_OPS_RETRIEVAL_LIMIT:4}
+
+management:
+  endpoints:
+    web:
+      base-path: /
+      exposure:
+        include: health,info

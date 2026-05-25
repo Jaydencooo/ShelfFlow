@@ -1,0 +1,315 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd" >
+
+<mapper namespace="com.shelfflow.services.admin.aiops.persistence.AdminAiOpsPersistenceMapper">
+
+    <select id="pageKnowledge" resultType="com.shelfflow.services.admin.aiops.persistence.dataobject.AdminAiKnowledgeDataObject">
+        select
+            id,
+            title,
+            category,
+            content,
+            create_time as createTime,
+            update_time as updateTime,
+            create_user as createUser,
+            update_user as updateUser
+        from ai_knowledge_base
+        <where>
+            <if test="criteria.keyword != null">
+                and (title like concat('%', #{criteria.keyword}, '%') or content like concat('%', #{criteria.keyword}, '%'))
+            </if>
+            <if test="criteria.category != null">
+                and category = #{criteria.category}
+            </if>
+        </where>
+        order by ${criteria.sortColumn} ${criteria.sortDirection}, id desc
+        limit #{criteria.limit} offset #{criteria.offset}
+    </select>
+
+    <select id="countKnowledge" resultType="long">
+        select count(1)
+        from ai_knowledge_base
+        <where>
+            <if test="criteria.keyword != null">
+                and (title like concat('%', #{criteria.keyword}, '%') or content like concat('%', #{criteria.keyword}, '%'))
+            </if>
+            <if test="criteria.category != null">
+                and category = #{criteria.category}
+            </if>
+        </where>
+    </select>
+
+    <select id="findKnowledgeById" resultType="com.shelfflow.services.admin.aiops.persistence.dataobject.AdminAiKnowledgeDataObject">
+        select
+            id,
+            title,
+            category,
+            content,
+            create_time as createTime,
+            update_time as updateTime,
+            create_user as createUser,
+            update_user as updateUser
+        from ai_knowledge_base
+        where id = #{id}
+    </select>
+
+    <insert id="insertKnowledge" parameterType="com.shelfflow.services.admin.aiops.persistence.dataobject.AdminAiKnowledgeDataObject"
+            useGeneratedKeys="true" keyProperty="id">
+        insert into ai_knowledge_base(title, category, content, create_time, update_time, create_user, update_user)
+        values(#{title}, #{category}, #{content}, #{createTime}, #{updateTime}, #{createUser}, #{updateUser})
+    </insert>
+
+    <update id="updateKnowledge" parameterType="com.shelfflow.services.admin.aiops.persistence.dataobject.AdminAiKnowledgeDataObject">
+        update ai_knowledge_base
+        set
+            title = #{title},
+            category = #{category},
+            content = #{content},
+            update_time = #{updateTime},
+            update_user = #{updateUser}
+        where id = #{id}
+    </update>
+
+    <delete id="deleteKnowledge">
+        delete from ai_knowledge_base where id = #{id}
+    </delete>
+
+    <select id="retrieveKnowledge" resultType="com.shelfflow.services.admin.aiops.persistence.dataobject.AdminAiKnowledgeDataObject">
+        select
+            id,
+            title,
+            category,
+            content,
+            create_time as createTime,
+            update_time as updateTime,
+            create_user as createUser,
+            update_user as updateUser
+        from ai_knowledge_base
+        <where>
+            <if test="keyword != null">
+                and (title like concat('%', #{keyword}, '%') or category like concat('%', #{keyword}, '%') or content like concat('%', #{keyword}, '%'))
+            </if>
+        </where>
+        order by update_time desc, id desc
+        limit #{limit}
+    </select>
+
+    <select id="listSuggestions" resultType="com.shelfflow.services.admin.aiops.persistence.dataobject.AdminAiOpsSuggestionRow">
+        select * from (
+            select
+                'EXPIRED' as type,
+                'HIGH' as priority,
+                '过期批次需要立即下架' as title,
+                concat(p.name, ' 批次 ', b.batch_code, ' 已过期 ', abs(datediff(b.expiration_time, now())), ' 天，可售库存 ', greatest(b.stock_quantity - b.locked_quantity - b.sold_quantity, 0)) as content,
+                p.id as productId,
+                p.name as productName,
+                b.id as batchId,
+                b.batch_code as batchCode,
+                datediff(b.expiration_time, now()) as daysToExpire,
+                greatest(b.stock_quantity - b.locked_quantity - b.sold_quantity, 0) as availableQuantity,
+                '建议立即停用批次并做损耗盘点' as suggestedAction
+            from inventory_batch b
+            left join product p on b.product_id = p.id
+            where b.status = 1
+              and b.expiration_time &lt; now()
+              and greatest(b.stock_quantity - b.locked_quantity - b.sold_quantity, 0) &gt; 0
+            union all
+            select
+                'EXPIRING_SOON' as type,
+                case when datediff(b.expiration_time, now()) &lt;= 1 then 'HIGH' else 'MEDIUM' end as priority,
+                '临期批次需要加速流转' as title,
+                concat(p.name, ' 批次 ', b.batch_code, ' 距过期 ', datediff(b.expiration_time, now()), ' 天，可售库存 ', greatest(b.stock_quantity - b.locked_quantity - b.sold_quantity, 0)) as content,
+                p.id as productId,
+                p.name as productName,
+                b.id as batchId,
+                b.batch_code as batchCode,
+                datediff(b.expiration_time, now()) as daysToExpire,
+                greatest(b.stock_quantity - b.locked_quantity - b.sold_quantity, 0) as availableQuantity,
+                case when datediff(b.expiration_time, now()) &lt;= 1 then '建议立即进入清仓价并置顶展示' else '建议提高曝光并启用临期折扣' end as suggestedAction
+            from inventory_batch b
+            left join product p on b.product_id = p.id
+            where b.status = 1
+              and b.expiration_time &gt;= now()
+              and datediff(b.expiration_time, now()) &lt;= 3
+              and greatest(b.stock_quantity - b.locked_quantity - b.sold_quantity, 0) &gt; 0
+            union all
+            select
+                'SOLD_OUT' as type,
+                'LOW' as priority,
+                '批次已售罄' as title,
+                concat(p.name, ' 批次 ', b.batch_code, ' 已无可售库存') as content,
+                p.id as productId,
+                p.name as productName,
+                b.id as batchId,
+                b.batch_code as batchCode,
+                datediff(b.expiration_time, now()) as daysToExpire,
+                greatest(b.stock_quantity - b.locked_quantity - b.sold_quantity, 0) as availableQuantity,
+                '建议将批次状态调整为售罄并补充新批次' as suggestedAction
+            from inventory_batch b
+            left join product p on b.product_id = p.id
+            where b.status = 1
+              and b.stock_quantity &lt;= b.sold_quantity
+            union all
+            select
+                'OVERSTOCK' as type,
+                'MEDIUM' as priority,
+                '高库存批次需要运营干预' as title,
+                concat(p.name, ' 批次 ', b.batch_code, ' 可售库存 ', greatest(b.stock_quantity - b.locked_quantity - b.sold_quantity, 0), '，存在滞销风险') as content,
+                p.id as productId,
+                p.name as productName,
+                b.id as batchId,
+                b.batch_code as batchCode,
+                datediff(b.expiration_time, now()) as daysToExpire,
+                greatest(b.stock_quantity - b.locked_quantity - b.sold_quantity, 0) as availableQuantity,
+                '建议组合促销或下调动态定价规则' as suggestedAction
+            from inventory_batch b
+            left join product p on b.product_id = p.id
+            where b.status = 1
+              and datediff(b.expiration_time, now()) between 4 and 10
+              and greatest(b.stock_quantity - b.locked_quantity - b.sold_quantity, 0) &gt;= 50
+        ) t
+        left join ai_ops_suggestion_action a on a.suggestion_id = concat(t.type, '-', t.batchId)
+        where coalesce(a.status, 'pending') = 'pending'
+        order by case priority when 'HIGH' then 1 when 'MEDIUM' then 2 else 3 end, daysToExpire asc, availableQuantity desc
+        limit #{limit}
+    </select>
+
+    <select id="listSuggestions" databaseId="h2" resultType="com.shelfflow.services.admin.aiops.persistence.dataobject.AdminAiOpsSuggestionRow">
+        select * from (
+            select
+                'EXPIRED' as type,
+                'HIGH' as priority,
+                '过期批次需要立即下架' as title,
+                concat(p.name, ' 批次 ', b.batch_code, ' 已过期 ', abs(datediff('DAY', now(), b.expiration_time)), ' 天，可售库存 ', greatest(b.stock_quantity - b.locked_quantity - b.sold_quantity, 0)) as content,
+                p.id as productId,
+                p.name as productName,
+                b.id as batchId,
+                b.batch_code as batchCode,
+                datediff('DAY', now(), b.expiration_time) as daysToExpire,
+                greatest(b.stock_quantity - b.locked_quantity - b.sold_quantity, 0) as availableQuantity,
+                '建议立即停用批次并做损耗盘点' as suggestedAction
+            from inventory_batch b
+            left join product p on b.product_id = p.id
+            where b.status = 1
+              and b.expiration_time &lt; now()
+              and greatest(b.stock_quantity - b.locked_quantity - b.sold_quantity, 0) &gt; 0
+            union all
+            select
+                'EXPIRING_SOON' as type,
+                case when datediff('DAY', now(), b.expiration_time) &lt;= 1 then 'HIGH' else 'MEDIUM' end as priority,
+                '临期批次需要加速流转' as title,
+                concat(p.name, ' 批次 ', b.batch_code, ' 距过期 ', datediff('DAY', now(), b.expiration_time), ' 天，可售库存 ', greatest(b.stock_quantity - b.locked_quantity - b.sold_quantity, 0)) as content,
+                p.id as productId,
+                p.name as productName,
+                b.id as batchId,
+                b.batch_code as batchCode,
+                datediff('DAY', now(), b.expiration_time) as daysToExpire,
+                greatest(b.stock_quantity - b.locked_quantity - b.sold_quantity, 0) as availableQuantity,
+                case when datediff('DAY', now(), b.expiration_time) &lt;= 1 then '建议立即进入清仓价并置顶展示' else '建议提高曝光并启用临期折扣' end as suggestedAction
+            from inventory_batch b
+            left join product p on b.product_id = p.id
+            where b.status = 1
+              and b.expiration_time &gt;= now()
+              and datediff('DAY', now(), b.expiration_time) &lt;= 3
+              and greatest(b.stock_quantity - b.locked_quantity - b.sold_quantity, 0) &gt; 0
+            union all
+            select
+                'SOLD_OUT' as type,
+                'LOW' as priority,
+                '批次已售罄' as title,
+                concat(p.name, ' 批次 ', b.batch_code, ' 已无可售库存') as content,
+                p.id as productId,
+                p.name as productName,
+                b.id as batchId,
+                b.batch_code as batchCode,
+                datediff('DAY', now(), b.expiration_time) as daysToExpire,
+                greatest(b.stock_quantity - b.locked_quantity - b.sold_quantity, 0) as availableQuantity,
+                '建议将批次状态调整为售罄并补充新批次' as suggestedAction
+            from inventory_batch b
+            left join product p on b.product_id = p.id
+            where b.status = 1
+              and b.stock_quantity &lt;= b.sold_quantity
+            union all
+            select
+                'OVERSTOCK' as type,
+                'MEDIUM' as priority,
+                '高库存批次需要运营干预' as title,
+                concat(p.name, ' 批次 ', b.batch_code, ' 可售库存 ', greatest(b.stock_quantity - b.locked_quantity - b.sold_quantity, 0), '，存在滞销风险') as content,
+                p.id as productId,
+                p.name as productName,
+                b.id as batchId,
+                b.batch_code as batchCode,
+                datediff('DAY', now(), b.expiration_time) as daysToExpire,
+                greatest(b.stock_quantity - b.locked_quantity - b.sold_quantity, 0) as availableQuantity,
+                '建议组合促销或下调动态定价规则' as suggestedAction
+            from inventory_batch b
+            left join product p on b.product_id = p.id
+            where b.status = 1
+              and datediff('DAY', now(), b.expiration_time) between 4 and 10
+              and greatest(b.stock_quantity - b.locked_quantity - b.sold_quantity, 0) &gt;= 50
+        ) t
+        left join ai_ops_suggestion_action a on a.suggestion_id = concat(t.type, '-', t.batchId)
+        where coalesce(a.status, 'pending') = 'pending'
+        order by case priority when 'HIGH' then 1 when 'MEDIUM' then 2 else 3 end, daysToExpire asc, availableQuantity desc
+        limit #{limit}
+    </select>
+
+    <select id="findChatSessionById" resultType="com.shelfflow.services.admin.aiops.persistence.dataobject.AdminAiOpsChatSessionDataObject">
+        select id, admin_user_id as adminUserId, title, create_time as createTime, update_time as updateTime
+        from ai_ops_chat_session
+        where id = #{id}
+          and admin_user_id = #{adminUserId}
+    </select>
+
+    <select id="findLatestChatSession" resultType="com.shelfflow.services.admin.aiops.persistence.dataobject.AdminAiOpsChatSessionDataObject">
+        select id, admin_user_id as adminUserId, title, create_time as createTime, update_time as updateTime
+        from ai_ops_chat_session
+        where admin_user_id = #{adminUserId}
+        order by update_time desc, id desc
+        limit 1
+    </select>
+
+    <insert id="insertChatSession" parameterType="com.shelfflow.services.admin.aiops.persistence.dataobject.AdminAiOpsChatSessionDataObject"
+            useGeneratedKeys="true" keyProperty="id">
+        insert into ai_ops_chat_session(admin_user_id, title, create_time, update_time)
+        values(#{adminUserId}, #{title}, #{createTime}, #{updateTime})
+    </insert>
+
+    <update id="touchChatSession">
+        update ai_ops_chat_session
+        set update_time = now()
+        where id = #{id}
+    </update>
+
+    <insert id="insertChatMessage" parameterType="com.shelfflow.services.admin.aiops.persistence.dataobject.AdminAiOpsChatMessageDataObject"
+            useGeneratedKeys="true" keyProperty="id">
+        insert into ai_ops_chat_message(session_id, role, content, provider, model, references_json, create_time)
+        values(#{sessionId}, #{role}, #{content}, #{provider}, #{model}, #{referencesJson}, #{createTime})
+    </insert>
+
+    <select id="listChatMessages" resultType="com.shelfflow.services.admin.aiops.persistence.dataobject.AdminAiOpsChatMessageDataObject">
+        select id, session_id as sessionId, role, content, provider, model, references_json as referencesJson, create_time as createTime
+        from ai_ops_chat_message
+        where session_id = #{sessionId}
+        order by create_time asc, id asc
+        limit #{limit}
+    </select>
+
+    <select id="findSuggestionAction" resultType="com.shelfflow.services.admin.aiops.persistence.dataobject.AdminAiOpsSuggestionActionDataObject">
+        select id, suggestion_id as suggestionId, status, actor_id as actorId, create_time as createTime, update_time as updateTime
+        from ai_ops_suggestion_action
+        where suggestion_id = #{suggestionId}
+    </select>
+
+    <insert id="upsertSuggestionAction" parameterType="com.shelfflow.services.admin.aiops.persistence.dataobject.AdminAiOpsSuggestionActionDataObject">
+        insert into ai_ops_suggestion_action(suggestion_id, status, actor_id, create_time, update_time)
+        values(#{suggestionId}, #{status}, #{actorId}, #{createTime}, #{updateTime})
+        on duplicate key update status = values(status), actor_id = values(actor_id), update_time = values(update_time)
+    </insert>
+
+    <update id="upsertSuggestionAction" databaseId="h2" parameterType="com.shelfflow.services.admin.aiops.persistence.dataobject.AdminAiOpsSuggestionActionDataObject">
+        merge into ai_ops_suggestion_action key(suggestion_id)
+        values(default, #{suggestionId}, #{status}, #{actorId}, #{createTime}, #{updateTime})
+    </update>
+</mapper>

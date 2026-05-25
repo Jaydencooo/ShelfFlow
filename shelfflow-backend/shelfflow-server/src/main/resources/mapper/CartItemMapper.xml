@@ -1,0 +1,53 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd" >
+<mapper namespace="com.shelfflow.mapper.CartItemMapper">
+    <select id="list" parameterType="com.shelfflow.entity.CartItem" resultType="com.shelfflow.entity.CartItem">
+        select * from cart_item
+        <where>
+            <if test="productId != null">
+                and product_id = #{productId}
+            </if>
+            <if test="bundleId != null">
+                and bundle_id = #{bundleId}
+            </if>
+            <if test="batchId != null">
+                and batch_id = #{batchId}
+            </if>
+            <if test="productSpec != null">
+                and product_spec = #{productSpec}
+            </if>
+            <if test="userId != null">
+                and user_id = #{userId}
+            </if>
+        </where>
+
+    </select>
+
+    <delete id="deleteItem">
+        delete from cart_item
+        <where>
+            <if test="userId != null">
+                and user_id = #{userId}
+            </if>
+            <if test="productId != null">
+                and product_id = #{productId}
+            </if>
+            <if test="bundleId != null">
+                and bundle_id = #{bundleId}
+            </if>
+            <if test="batchId != null">
+                and batch_id = #{batchId}
+            </if>
+        </where>
+    </delete>
+
+    <insert id="insertBatch" parameterType="com.shelfflow.entity.CartItem">
+        insert into cart_item(name, image, user_id, product_id, bundle_id, batch_id, product_spec, number, amount, create_time)
+        VALUES
+        <foreach collection="list" item="sc" separator=",">
+            (#{sc.name},#{sc.image},#{sc.userId},#{sc.productId},#{sc.bundleId},#{sc.batchId},#{sc.productSpec},#{sc.number},#{sc.amount},#{sc.createTime})
+        </foreach>
+
+    </insert>
+</mapper>

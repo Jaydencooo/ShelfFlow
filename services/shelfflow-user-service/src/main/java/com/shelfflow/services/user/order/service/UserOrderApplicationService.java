@@ -1,0 +1,413 @@
+package com.shelfflow.services.user.order.service;
+
+import com.shelfflow.services.common.api.PageResponse;
+import com.shelfflow.services.common.domain.OrderEventActorType;
+import com.shelfflow.services.common.domain.OrderEventType;
+import com.shelfflow.services.common.exception.ApplicationException;
+import com.shelfflow.services.common.domain.UserOrderPayStatus;
+import com.shelfflow.services.common.domain.UserOrderStatus;
+import com.shelfflow.services.common.dto.OrderEventResponse;
+import com.shelfflow.services.common.dto.UserOrderDetailResponse;
+import com.shelfflow.services.common.dto.UserOrderCancelRequest;
+import com.shelfflow.services.common.dto.UserOrderItemResponse;
+import com.shelfflow.services.common.dto.UserOrderQuery;
+import com.shelfflow.services.common.dto.UserOrderSubmitRequest;
+import com.shelfflow.services.common.dto.UserOrderSubmitResponse;
+import com.shelfflow.services.common.dto.UserOrderSummaryResponse;
+import com.shelfflow.services.common.security.UserAuthenticatedUser;
+import com.shelfflow.services.user.auth.persistence.UserAccountPersistenceMapper;
+import com.shelfflow.services.user.auth.persistence.dataobject.UserAccountDataObject;
+import com.shelfflow.services.user.cart.persistence.UserCartPersistenceMapper;
+import com.shelfflow.services.user.config.UserOrderProperties;
+import com.shelfflow.services.user.order.domain.UserOrderPolicy;
+import com.shelfflow.services.user.order.persistence.UserOrderPersistenceMapper;
+import com.shelfflow.services.user.order.persistence.dataobject.UserOrderCartItemRow;
+import com.shelfflow.services.user.order.persistence.dataobject.UserOrderDataObject;
+import com.shelfflow.services.user.order.persistence.dataobject.UserOrderDetailRow;
+import com.shelfflow.services.user.order.persistence.dataobject.UserOrderDetailDataObject;
+import com.shelfflow.services.user.order.persistence.dataobject.UserOrderEventDataObject;
+import com.shelfflow.services.user.order.persistence.dataobject.UserOrderItemRow;
+import com.shelfflow.services.user.order.persistence.dataobject.UserOrderPageCriteria;
+import com.shelfflow.services.user.order.persistence.dataobject.UserOrderSummaryRow;
+import com.shelfflow.services.user.pickupcontact.domain.UserPickupContactPolicy;
+import com.shelfflow.services.user.pickupcontact.persistence.UserPickupContactPersistenceMapper;
+import com.shelfflow.services.user.pickupcontact.persistence.dataobject.UserPickupContactDataObject;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+import java.math.BigDecimal;
+import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+
+@Service
+public class UserOrderApplicationService {
+
+    private final UserOrderPersistenceMapper userOrderPersistenceMapper;
+    private final UserCartPersistenceMapper userCartPersistenceMapper;
+    private final UserAccountPersistenceMapper userAccountPersistenceMapper;
+    private final UserPickupContactPersistenceMapper userPickupContactPersistenceMapper;
+    private final UserOrderPolicy userOrderPolicy;
+    private final UserPickupContactPolicy userPickupContactPolicy;
+    private final UserOrderProperties userOrderProperties;
+
+    public UserOrderApplicationService(UserOrderPersistenceMapper userOrderPersistenceMapper,
+                                       UserCartPersistenceMapper userCartPersistenceMapper,
+                                       UserAccountPersistenceMapper userAccountPersistenceMapper,
+                                       UserPickupContactPersistenceMapper userPickupContactPersistenceMapper,
+                                       UserOrderPolicy userOrderPolicy,
+                                       UserPickupContactPolicy userPickupContactPolicy,
+                                       UserOrderProperties userOrderProperties) {
+        this.userOrderPersistenceMapper = userOrderPersistenceMapper;
+        this.userCartPersistenceMapper = userCartPersistenceMapper;
+        this.userAccountPersistenceMapper = userAccountPersistenceMapper;
+        this.userPickupContactPersistenceMapper = userPickupContactPersistenceMapper;
+        this.userOrderPolicy = userOrderPolicy;
+        this.userPickupContactPolicy = userPickupContactPolicy;
+        this.userOrderProperties = userOrderProperties;
+    }
+
+    @Transactional
+    public UserOrderSubmitResponse submit(UserAuthenticatedUser authenticatedUser, UserOrderSubmitRequest request) {
+        List<UserOrderCartItemRow> cartItems = userOrderPersistenceMapper.listCheckoutItemsByUserId(authenticatedUser.getUserId());
+        userOrderPolicy.ensureCartNotEmpty(cartItems);
+        userOrderPolicy.ensureCartItemsEligibleForSubmit(cartItems);
+
+        LocalDateTime now = LocalDateTime.now();
+        for (UserOrderCartItemRow cartItem : cartItems) {
+            int affectedRows = userOrderPersistenceMapper.incrementBatchLockedQuantity(
+                    cartItem.getBatchId(),
+                    cartItem.getQuantity(),
+                    now
+            );
+            userOrderPolicy.ensureStockLocked(affectedRows > 0);
+        }
+
+        UserAccountDataObject user = userAccountPersistenceMapper.findById(authenticatedUser.getUserId());
+        UserPickupContactDataObject pickupContact = resolvePickupContact(authenticatedUser, request);
+        UserOrderDataObject order = buildOrder(authenticatedUser, request, cartItems, user, pickupContact, now);
+        userOrderPersistenceMapper.insertOrder(order);
+        userOrderPersistenceMapper.insertOrderDetails(buildOrderDetails(order.getId(), cartItems));
+        userOrderPersistenceMapper.insertOrderEvent(buildOrderEvent(
+                order.getId(),
+                OrderEventType.SUBMITTED,
+                OrderEventActorType.USER,
+                authenticatedUser.getUserId(),
+                null,
+                UserOrderStatus.PENDING_PAYMENT,
+                null,
+                UserOrderPayStatus.UNPAID,
+                "用户提交订单",
+                now
+        ));
+        userCartPersistenceMapper.clearByUserId(authenticatedUser.getUserId());
+
+        return UserOrderSubmitResponse.builder()
+                .id(String.valueOf(order.getId()))
+                .orderNumber(order.getNumber())
+                .status(UserOrderStatus.fromLegacy(order.getStatus()))
+                .payStatus(UserOrderPayStatus.fromLegacy(order.getPayStatus()))
+                .totalAmount(order.getAmount())
+                .itemCount(userOrderPolicy.calculateItemCount(cartItems))
+                .pickupCode(order.getPickupCode())
+                .orderTime(order.getOrderTime())
+                .pickupDeadline(order.getPickupDeadline())
+                .build();
+    }
+
+    public PageResponse<UserOrderSummaryResponse> pageOrders(UserAuthenticatedUser authenticatedUser, UserOrderQuery query) {
+        UserOrderStatus status = userOrderPolicy.parseOptionalStatus(query.getStatus());
+        UserOrderPageCriteria criteria = UserOrderPageCriteria.builder()
+                .userId(authenticatedUser.getUserId())
+                .status(status == null ? null : status.legacyValue())
+                .offset((query.getPage() - 1) * query.getPageSize())
+                .pageSize(query.getPageSize())
+                .sortColumn(userOrderPolicy.resolveSortColumn(query.getSortBy()))
+                .sortOrder(query.getSortOrder().name())
+                .build();
+
+        List<UserOrderSummaryRow> rows = userOrderPersistenceMapper.pageOrders(criteria);
+        long total = userOrderPersistenceMapper.countOrders(criteria);
+        Map<Long, List<UserOrderItemResponse>> itemsByOrderId = resolveOrderItems(rows);
+
+        List<UserOrderSummaryResponse> items = rows.stream()
+                .map(row -> {
+                    List<UserOrderItemResponse> orderItems = itemsByOrderId.getOrDefault(row.getId(), List.of());
+                    return UserOrderSummaryResponse.builder()
+                            .id(String.valueOf(row.getId()))
+                            .orderNumber(row.getNumber())
+                            .status(UserOrderStatus.fromLegacy(row.getStatus()))
+                            .payStatus(UserOrderPayStatus.fromLegacy(row.getPayStatus()))
+                            .totalAmount(row.getAmount())
+                            .remark(row.getRemark())
+                            .pickupCode(row.getPickupCode())
+                            .orderTime(row.getOrderTime())
+                            .pickupDeadline(row.getPickupDeadline())
+                            .itemCount(orderItems.stream().mapToInt(UserOrderItemResponse::getQuantity).sum())
+                            .items(orderItems)
+                            .build();
+                })
+                .toList();
+
+        return PageResponse.<UserOrderSummaryResponse>builder()
+                .items(items)
+                .total(total)
+                .page(query.getPage())
+                .pageSize(query.getPageSize())
+                .build();
+    }
+
+    public UserOrderDetailResponse getOrderDetail(UserAuthenticatedUser authenticatedUser, String orderId) {
+        Long id = userOrderPolicy.parseRequiredOrderId(orderId);
+        UserOrderDetailRow row = userOrderPersistenceMapper.findOrderByIdAndUserId(id, authenticatedUser.getUserId());
+        userOrderPolicy.ensureOrderExists(row != null);
+        List<UserOrderItemResponse> items = userOrderPersistenceMapper.listOrderItemsByOrderId(id).stream()
+                .map(this::toItemResponse)
+                .toList();
+        List<OrderEventResponse> events = userOrderPersistenceMapper.listOrderEventsByOrderId(id).stream()
+                .map(this::toEventResponse)
+                .toList();
+        return UserOrderDetailResponse.builder()
+                .id(String.valueOf(row.getId()))
+                .orderNumber(row.getNumber())
+                .status(UserOrderStatus.fromLegacy(row.getStatus()))
+                .payStatus(UserOrderPayStatus.fromLegacy(row.getPayStatus()))
+                .totalAmount(row.getAmount())
+                .remark(row.getRemark())
+                .phone(row.getPhone())
+                .pickupPoint(row.getPickupPoint())
+                .consignee(row.getConsignee())
+                .pickupCode(row.getPickupCode())
+                .orderTime(row.getOrderTime())
+                .checkoutTime(row.getCheckoutTime())
+                .pickupDeadline(row.getPickupDeadline())
+                .cancelTime(row.getCancelTime())
+                .cancelReason(row.getCancelReason())
+                .itemCount(items.stream().mapToInt(UserOrderItemResponse::getQuantity).sum())
+                .items(items)
+                .events(events)
+                .build();
+    }
+
+    @Transactional
+    public void cancelOrder(UserAuthenticatedUser authenticatedUser, String orderId, UserOrderCancelRequest request) {
+        Long id = userOrderPolicy.parseRequiredOrderId(orderId);
+        UserOrderDetailRow row = userOrderPersistenceMapper.findOrderByIdAndUserId(id, authenticatedUser.getUserId());
+        userOrderPolicy.ensureOrderExists(row != null);
+        UserOrderStatus currentStatus = UserOrderStatus.fromLegacy(row.getStatus());
+        userOrderPolicy.ensureCancelableStatus(currentStatus);
+        String cancelReason = userOrderPolicy.normalizeCancelReason(request == null ? null : request.getCancelReason());
+
+        LocalDateTime now = LocalDateTime.now();
+        List<UserOrderItemRow> items = userOrderPersistenceMapper.listOrderItemsByOrderId(id);
+        for (UserOrderItemRow item : items) {
+            if (item.getBatchId() == null) {
+                continue;
+            }
+            int affectedRows = userOrderPersistenceMapper.decrementBatchLockedQuantity(item.getBatchId(), item.getNumber(), now);
+            userOrderPolicy.ensureStockReleased(affectedRows > 0);
+        }
+
+        int affectedRows = userOrderPersistenceMapper.cancelOrder(
+                id,
+                UserOrderStatus.CANCELLED.legacyValue(),
+                cancelReason,
+                now
+        );
+        if (affectedRows <= 0) {
+            throw new ApplicationException(com.shelfflow.services.common.api.ErrorCode.CONFLICT, "当前订单状态不允许取消");
+        }
+        userOrderPersistenceMapper.insertOrderEvent(buildOrderEvent(
+                id,
+                OrderEventType.CANCELLED,
+                OrderEventActorType.USER,
+                authenticatedUser.getUserId(),
+                currentStatus,
+                UserOrderStatus.CANCELLED,
+                UserOrderPayStatus.fromLegacy(row.getPayStatus()),
+                UserOrderPayStatus.fromLegacy(row.getPayStatus()),
+                cancelReason,
+                now
+        ));
+    }
+
+    @Transactional
+    public UserOrderDetailResponse payOrder(UserAuthenticatedUser authenticatedUser, String orderId) {
+        Long id = userOrderPolicy.parseRequiredOrderId(orderId);
+        UserOrderDetailRow row = userOrderPersistenceMapper.findOrderByIdAndUserId(id, authenticatedUser.getUserId());
+        userOrderPolicy.ensureOrderExists(row != null);
+        userOrderPolicy.ensurePayableStatus(
+                UserOrderStatus.fromLegacy(row.getStatus()),
+                UserOrderPayStatus.fromLegacy(row.getPayStatus())
+        );
+
+        LocalDateTime checkoutTime = LocalDateTime.now();
+        int affectedRows = userOrderPersistenceMapper.payOrder(
+                id,
+                UserOrderStatus.TO_PREPARE.legacyValue(),
+                UserOrderPayStatus.PAID.legacyValue(),
+                checkoutTime
+        );
+        if (affectedRows <= 0) {
+            throw new ApplicationException(com.shelfflow.services.common.api.ErrorCode.CONFLICT, "当前订单状态不允许支付");
+        }
+        userOrderPersistenceMapper.insertOrderEvent(buildOrderEvent(
+                id,
+                OrderEventType.PAID,
+                OrderEventActorType.USER,
+                authenticatedUser.getUserId(),
+                UserOrderStatus.fromLegacy(row.getStatus()),
+                UserOrderStatus.TO_PREPARE,
+                UserOrderPayStatus.fromLegacy(row.getPayStatus()),
+                UserOrderPayStatus.PAID,
+                "用户确认支付",
+                checkoutTime
+        ));
+        return getOrderDetail(authenticatedUser, orderId);
+    }
+
+    private UserOrderEventDataObject buildOrderEvent(Long orderId,
+                                                     OrderEventType eventType,
+                                                     OrderEventActorType actorType,
+                                                     Long actorId,
+                                                     UserOrderStatus fromStatus,
+                                                     UserOrderStatus toStatus,
+                                                     UserOrderPayStatus fromPayStatus,
+                                                     UserOrderPayStatus toPayStatus,
+                                                     String note,
+                                                     LocalDateTime eventTime) {
+        UserOrderEventDataObject event = new UserOrderEventDataObject();
+        event.setOrderId(orderId);
+        event.setEventType(eventType.value());
+        event.setActorType(actorType.value());
+        event.setActorId(actorId);
+        event.setFromStatus(fromStatus == null ? null : fromStatus.legacyValue());
+        event.setToStatus(toStatus == null ? null : toStatus.legacyValue());
+        event.setFromPayStatus(fromPayStatus == null ? null : fromPayStatus.legacyValue());
+        event.setToPayStatus(toPayStatus == null ? null : toPayStatus.legacyValue());
+        event.setNote(note);
+        event.setCreateTime(eventTime);
+        return event;
+    }
+
+    private UserOrderDataObject buildOrder(UserAuthenticatedUser authenticatedUser,
+                                           UserOrderSubmitRequest request,
+                                           List<UserOrderCartItemRow> cartItems,
+                                           UserAccountDataObject user,
+                                           UserPickupContactDataObject pickupContact,
+                                           LocalDateTime now) {
+        UserOrderDataObject order = new UserOrderDataObject();
+        order.setNumber(userOrderPolicy.nextOrderNumber(now));
+        order.setStatus(UserOrderStatus.PENDING_PAYMENT.legacyValue());
+        order.setUserId(authenticatedUser.getUserId());
+        order.setPickupContactId(pickupContact == null ? null : pickupContact.getId());
+        order.setOrderTime(now);
+        order.setCheckoutTime(null);
+        order.setPayMethod(userOrderProperties.getDefaultPayMethod());
+        order.setPayStatus(UserOrderPayStatus.UNPAID.legacyValue());
+        order.setAmount(userOrderPolicy.calculateOrderAmount(cartItems));
+        order.setRemark(userOrderPolicy.normalizeOptionalRemark(request.getRemark()));
+        order.setPhone(resolveOrderPhone(user, pickupContact));
+        order.setUserName(user == null ? null : user.getName());
+        order.setConsignee(resolveOrderConsignee(user, pickupContact));
+        order.setPickupPoint(userOrderPolicy.resolvePickupPoint());
+        order.setPreparationMode(userOrderProperties.getDefaultPreparationMode());
+        order.setFulfillmentFee(userOrderProperties.getDefaultFulfillmentFee());
+        order.setPackageCount(userOrderProperties.getDefaultPackageCount());
+        order.setPackageStrategy(userOrderProperties.getDefaultPackageStrategy());
+        order.setFulfillmentType(userOrderProperties.getDefaultFulfillmentType());
+        order.setPickupCode(userOrderPolicy.nextPickupCode());
+        order.setPickupDeadline(userOrderPolicy.resolvePickupDeadline(now));
+        return order;
+    }
+
+    private UserPickupContactDataObject resolvePickupContact(UserAuthenticatedUser authenticatedUser, UserOrderSubmitRequest request) {
+        if (request.getPickupContactId() != null && !request.getPickupContactId().isBlank()) {
+            Long contactId = userPickupContactPolicy.parseRequiredContactId(request.getPickupContactId());
+            UserPickupContactDataObject contact = userPickupContactPersistenceMapper.findByIdAndUserId(contactId, authenticatedUser.getUserId());
+            userPickupContactPolicy.ensureContactExists(contact != null);
+            return contact;
+        }
+
+        return userPickupContactPersistenceMapper.listByUserId(authenticatedUser.getUserId()).stream()
+                .filter(contact -> Integer.valueOf(1).equals(contact.getIsDefault()))
+                .findFirst()
+                .orElse(null);
+    }
+
+    private String resolveOrderPhone(UserAccountDataObject user, UserPickupContactDataObject pickupContact) {
+        if (pickupContact != null && pickupContact.getPhone() != null && !pickupContact.getPhone().isBlank()) {
+            return pickupContact.getPhone();
+        }
+        return user == null ? null : user.getPhone();
+    }
+
+    private String resolveOrderConsignee(UserAccountDataObject user, UserPickupContactDataObject pickupContact) {
+        if (pickupContact != null && pickupContact.getConsignee() != null && !pickupContact.getConsignee().isBlank()) {
+            return pickupContact.getConsignee();
+        }
+        return user == null ? null : user.getName();
+    }
+
+    private List<UserOrderDetailDataObject> buildOrderDetails(Long orderId, List<UserOrderCartItemRow> cartItems) {
+        List<UserOrderDetailDataObject> items = new ArrayList<>(cartItems.size());
+        for (UserOrderCartItemRow cartItem : cartItems) {
+            UserOrderDetailDataObject item = new UserOrderDetailDataObject();
+            item.setOrderId(orderId);
+            item.setProductId(cartItem.getProductId());
+            item.setBatchId(cartItem.getBatchId());
+            item.setName(cartItem.getName());
+            item.setImage(cartItem.getImage());
+            item.setProductSpec(cartItem.getProductSpec());
+            item.setNumber(cartItem.getQuantity());
+            item.setAmount(cartItem.getAmount());
+            items.add(item);
+        }
+        return items;
+    }
+
+    private Map<Long, List<UserOrderItemResponse>> resolveOrderItems(List<UserOrderSummaryRow> rows) {
+        if (rows.isEmpty()) {
+            return Map.of();
+        }
+        List<Long> orderIds = rows.stream().map(UserOrderSummaryRow::getId).toList();
+        List<UserOrderItemRow> itemRows = userOrderPersistenceMapper.listOrderItemsByOrderIds(orderIds);
+        Map<Long, List<UserOrderItemResponse>> result = new LinkedHashMap<>();
+        for (UserOrderItemRow itemRow : itemRows) {
+            result.computeIfAbsent(itemRow.getOrderId(), ignored -> new ArrayList<>())
+                    .add(toItemResponse(itemRow));
+        }
+        return result;
+    }
+
+    private UserOrderItemResponse toItemResponse(UserOrderItemRow itemRow) {
+        BigDecimal lineAmount = itemRow.getAmount().multiply(BigDecimal.valueOf(itemRow.getNumber()));
+        return UserOrderItemResponse.builder()
+                .productId(String.valueOf(itemRow.getProductId()))
+                .batchId(itemRow.getBatchId() == null ? null : String.valueOf(itemRow.getBatchId()))
+                .name(itemRow.getName())
+                .image(itemRow.getImage())
+                .productSpec(itemRow.getProductSpec())
+                .quantity(itemRow.getNumber())
+                .unitPrice(itemRow.getAmount())
+                .lineAmount(lineAmount)
+                .build();
+    }
+
+    private OrderEventResponse toEventResponse(UserOrderEventDataObject row) {
+        return OrderEventResponse.builder()
+                .id(String.valueOf(row.getId()))
+                .eventType(OrderEventType.fromValue(row.getEventType()))
+                .actorType(OrderEventActorType.fromValue(row.getActorType()))
+                .actorId(row.getActorId() == null ? null : String.valueOf(row.getActorId()))
+                .fromStatus(row.getFromStatus() == null ? null : UserOrderStatus.fromLegacy(row.getFromStatus()))
+                .toStatus(row.getToStatus() == null ? null : UserOrderStatus.fromLegacy(row.getToStatus()))
+                .fromPayStatus(row.getFromPayStatus() == null ? null : UserOrderPayStatus.fromLegacy(row.getFromPayStatus()))
+                .toPayStatus(row.getToPayStatus() == null ? null : UserOrderPayStatus.fromLegacy(row.getToPayStatus()))
+                .note(row.getNote())
+                .eventTime(row.getCreateTime())
+                .build();
+    }
+}

@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd" >
+
+<mapper namespace="com.shelfflow.mapper.BundleProductMapper">
+    <select id="getIdsByProductIds" resultType="java.lang.Long">
+        select bundle_id from bundle_product where product_id in
+        <foreach collection="ids" item="productId" separator="," open="(" close=")">
+            #{productId}
+        </foreach>
+    </select>
+
+    <insert id="add" parameterType="com.shelfflow.entity.BundleProduct">
+        insert into bundle_product(bundle_id, product_id, name, price, copies)
+        values
+        <foreach collection="bundleProducts" item="bundleProduct"  separator=",">
+            (#{bundleProduct.bundleId}, #{bundleProduct.productId} ,#{bundleProduct.name} ,#{bundleProduct.price},#{bundleProduct.copies})
+        </foreach>
+    </insert>
+
+
+
+
+</mapper>
+

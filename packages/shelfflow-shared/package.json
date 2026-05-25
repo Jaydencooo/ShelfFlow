@@ -1,0 +1,19 @@
+{
+  "name": "@shelfflow/shared",
+  "version": "1.0.0",
+  "type": "module",
+  "main": "src/index.ts",
+  "types": "src/index.ts",
+  "private": true,
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "lint": "tsc -p tsconfig.json --noEmit",
+    "test": "node -e \"process.exit(0)\""
+  },
+  "dependencies": {
+    "pino": "^9.7.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.9.3"
+  }
+}

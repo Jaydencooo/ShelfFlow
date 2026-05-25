@@ -1,0 +1,415 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd" >
+
+<mapper namespace="com.shelfflow.services.admin.inventorybatch.persistence.InventoryBatchPersistenceMapper">
+
+    <select id="page" resultType="com.shelfflow.services.admin.inventorybatch.persistence.dataobject.InventoryBatchPageRow">
+        select
+            b.id,
+            b.product_id as productId,
+            p.name as productName,
+            p.category_id as categoryId,
+            b.batch_code as batchCode,
+            b.production_time as productionTime,
+            b.expiration_time as expirationTime,
+            b.stock_quantity as stockQuantity,
+            b.locked_quantity as lockedQuantity,
+            b.sold_quantity as soldQuantity,
+            greatest(b.stock_quantity - b.locked_quantity - b.sold_quantity, 0) as availableQuantity,
+            greatest(datediff(b.expiration_time, now()), 0) as daysToExpire,
+            case when b.status = 3 then greatest(b.stock_quantity - b.sold_quantity, 0) else 0 end as wasteQuantity,
+            p.price as basePrice,
+            round(
+                p.price * coalesce((
+                    select pr.discount_rate
+                    from pricing_rule pr
+                    where pr.status = 1
+                      and greatest(datediff(b.expiration_time, now()), 0) between pr.min_days_to_expire and pr.max_days_to_expire
+                    order by pr.priority desc, pr.max_days_to_expire asc
+                    limit 1
+                ), 1.00),
+                2
+            ) as currentPrice,
+            b.status
+        from inventory_batch b
+        left join product p on p.id = b.product_id
+        <where>
+            <if test="criteria.keyword != null">
+                and (
+                    b.batch_code like concat('%', #{criteria.keyword}, '%')
+                    or p.name like concat('%', #{criteria.keyword}, '%')
+                )
+            </if>
+            <if test="criteria.categoryId != null">
+                and p.category_id = #{criteria.categoryId}
+            </if>
+            <if test="criteria.status != null">
+                and b.status = #{criteria.status}
+            </if>
+            <if test="criteria.pricingStatus != null">
+                <choose>
+                    <when test="criteria.pricingStatus == 'active'">
+                        and b.status in (1, 2)
+                    </when>
+                    <when test="criteria.pricingStatus == 'disabled'">
+                        and b.status = 0
+                    </when>
+                    <when test="criteria.pricingStatus == 'stale'">
+                        and b.status = 3
+                    </when>
+                    <when test="criteria.pricingStatus == 'pending'">
+                        and 1 = 0
+                    </when>
+                </choose>
+            </if>
+            <if test="criteria.expiryDaysMin != null">
+                and datediff(b.expiration_time, now()) &gt;= #{criteria.expiryDaysMin}
+            </if>
+            <if test="criteria.expiryDaysMax != null">
+                and datediff(b.expiration_time, now()) &lt;= #{criteria.expiryDaysMax}
+            </if>
+        </where>
+        order by ${criteria.sortColumn} ${criteria.sortDirection}, b.id desc
+        limit #{criteria.limit} offset #{criteria.offset}
+    </select>
+
+    <select id="page" databaseId="h2" resultType="com.shelfflow.services.admin.inventorybatch.persistence.dataobject.InventoryBatchPageRow">
+        select
+            b.id,
+            b.product_id as productId,
+            p.name as productName,
+            p.category_id as categoryId,
+            b.batch_code as batchCode,
+            b.production_time as productionTime,
+            b.expiration_time as expirationTime,
+            b.stock_quantity as stockQuantity,
+            b.locked_quantity as lockedQuantity,
+            b.sold_quantity as soldQuantity,
+            greatest(b.stock_quantity - b.locked_quantity - b.sold_quantity, 0) as availableQuantity,
+            greatest(datediff('DAY', now(), b.expiration_time), 0) as daysToExpire,
+            case when b.status = 3 then greatest(b.stock_quantity - b.sold_quantity, 0) else 0 end as wasteQuantity,
+            p.price as basePrice,
+            round(
+                p.price * coalesce((
+                    select pr.discount_rate
+                    from pricing_rule pr
+                    where pr.status = 1
+                      and greatest(datediff('DAY', now(), b.expiration_time), 0) between pr.min_days_to_expire and pr.max_days_to_expire
+                    order by pr.priority desc, pr.max_days_to_expire asc
+                    limit 1
+                ), 1.00),
+                2
+            ) as currentPrice,
+            b.status
+        from inventory_batch b
+        left join product p on p.id = b.product_id
+        <where>
+            <if test="criteria.keyword != null">
+                and (
+                    b.batch_code like concat('%', #{criteria.keyword}, '%')
+                    or p.name like concat('%', #{criteria.keyword}, '%')
+                )
+            </if>
+            <if test="criteria.categoryId != null">
+                and p.category_id = #{criteria.categoryId}
+            </if>
+            <if test="criteria.status != null">
+                and b.status = #{criteria.status}
+            </if>
+            <if test="criteria.pricingStatus != null">
+                <choose>
+                    <when test="criteria.pricingStatus == 'active'">
+                        and b.status in (1, 2)
+                    </when>
+                    <when test="criteria.pricingStatus == 'disabled'">
+                        and b.status = 0
+                    </when>
+                    <when test="criteria.pricingStatus == 'stale'">
+                        and b.status = 3
+                    </when>
+                    <when test="criteria.pricingStatus == 'pending'">
+                        and 1 = 0
+                    </when>
+                </choose>
+            </if>
+            <if test="criteria.expiryDaysMin != null">
+                and datediff('DAY', now(), b.expiration_time) &gt;= #{criteria.expiryDaysMin}
+            </if>
+            <if test="criteria.expiryDaysMax != null">
+                and datediff('DAY', now(), b.expiration_time) &lt;= #{criteria.expiryDaysMax}
+            </if>
+        </where>
+        order by ${criteria.sortColumn} ${criteria.sortDirection}, b.id desc
+        limit #{criteria.limit} offset #{criteria.offset}
+    </select>
+
+    <select id="count" resultType="long">
+        select count(1)
+        from inventory_batch b
+        left join product p on p.id = b.product_id
+        <where>
+            <if test="criteria.keyword != null">
+                and (
+                    b.batch_code like concat('%', #{criteria.keyword}, '%')
+                    or p.name like concat('%', #{criteria.keyword}, '%')
+                )
+            </if>
+            <if test="criteria.categoryId != null">
+                and p.category_id = #{criteria.categoryId}
+            </if>
+            <if test="criteria.status != null">
+                and b.status = #{criteria.status}
+            </if>
+            <if test="criteria.pricingStatus != null">
+                <choose>
+                    <when test="criteria.pricingStatus == 'active'">
+                        and b.status in (1, 2)
+                    </when>
+                    <when test="criteria.pricingStatus == 'disabled'">
+                        and b.status = 0
+                    </when>
+                    <when test="criteria.pricingStatus == 'stale'">
+                        and b.status = 3
+                    </when>
+                    <when test="criteria.pricingStatus == 'pending'">
+                        and 1 = 0
+                    </when>
+                </choose>
+            </if>
+            <if test="criteria.expiryDaysMin != null">
+                and datediff(b.expiration_time, now()) &gt;= #{criteria.expiryDaysMin}
+            </if>
+            <if test="criteria.expiryDaysMax != null">
+                and datediff(b.expiration_time, now()) &lt;= #{criteria.expiryDaysMax}
+            </if>
+        </where>
+    </select>
+
+    <select id="count" databaseId="h2" resultType="long">
+        select count(1)
+        from inventory_batch b
+        left join product p on p.id = b.product_id
+        <where>
+            <if test="criteria.keyword != null">
+                and (
+                    b.batch_code like concat('%', #{criteria.keyword}, '%')
+                    or p.name like concat('%', #{criteria.keyword}, '%')
+                )
+            </if>
+            <if test="criteria.categoryId != null">
+                and p.category_id = #{criteria.categoryId}
+            </if>
+            <if test="criteria.status != null">
+                and b.status = #{criteria.status}
+            </if>
+            <if test="criteria.pricingStatus != null">
+                <choose>
+                    <when test="criteria.pricingStatus == 'active'">
+                        and b.status in (1, 2)
+                    </when>
+                    <when test="criteria.pricingStatus == 'disabled'">
+                        and b.status = 0
+                    </when>
+                    <when test="criteria.pricingStatus == 'stale'">
+                        and b.status = 3
+                    </when>
+                    <when test="criteria.pricingStatus == 'pending'">
+                        and 1 = 0
+                    </when>
+                </choose>
+            </if>
+            <if test="criteria.expiryDaysMin != null">
+                and datediff('DAY', now(), b.expiration_time) &gt;= #{criteria.expiryDaysMin}
+            </if>
+            <if test="criteria.expiryDaysMax != null">
+                and datediff('DAY', now(), b.expiration_time) &lt;= #{criteria.expiryDaysMax}
+            </if>
+        </where>
+    </select>
+
+    <select id="findById" resultType="com.shelfflow.services.admin.inventorybatch.persistence.dataobject.InventoryBatchPageRow">
+        select
+            b.id,
+            b.product_id as productId,
+            p.name as productName,
+            p.category_id as categoryId,
+            b.batch_code as batchCode,
+            b.production_time as productionTime,
+            b.expiration_time as expirationTime,
+            b.stock_quantity as stockQuantity,
+            b.locked_quantity as lockedQuantity,
+            b.sold_quantity as soldQuantity,
+            greatest(b.stock_quantity - b.locked_quantity - b.sold_quantity, 0) as availableQuantity,
+            greatest(datediff(b.expiration_time, now()), 0) as daysToExpire,
+            case when b.status = 3 then greatest(b.stock_quantity - b.sold_quantity, 0) else 0 end as wasteQuantity,
+            p.price as basePrice,
+            round(
+                p.price * coalesce((
+                    select pr.discount_rate
+                    from pricing_rule pr
+                    where pr.status = 1
+                      and greatest(datediff(b.expiration_time, now()), 0) between pr.min_days_to_expire and pr.max_days_to_expire
+                    order by pr.priority desc, pr.max_days_to_expire asc
+                    limit 1
+                ), 1.00),
+                2
+            ) as currentPrice,
+            b.status
+        from inventory_batch b
+        left join product p on p.id = b.product_id
+        where b.id = #{id}
+    </select>
+
+    <select id="findById" databaseId="h2" resultType="com.shelfflow.services.admin.inventorybatch.persistence.dataobject.InventoryBatchPageRow">
+        select
+            b.id,
+            b.product_id as productId,
+            p.name as productName,
+            p.category_id as categoryId,
+            b.batch_code as batchCode,
+            b.production_time as productionTime,
+            b.expiration_time as expirationTime,
+            b.stock_quantity as stockQuantity,
+            b.locked_quantity as lockedQuantity,
+            b.sold_quantity as soldQuantity,
+            greatest(b.stock_quantity - b.locked_quantity - b.sold_quantity, 0) as availableQuantity,
+            greatest(datediff('DAY', now(), b.expiration_time), 0) as daysToExpire,
+            case when b.status = 3 then greatest(b.stock_quantity - b.sold_quantity, 0) else 0 end as wasteQuantity,
+            p.price as basePrice,
+            round(
+                p.price * coalesce((
+                    select pr.discount_rate
+                    from pricing_rule pr
+                    where pr.status = 1
+                      and greatest(datediff('DAY', now(), b.expiration_time), 0) between pr.min_days_to_expire and pr.max_days_to_expire
+                    order by pr.priority desc, pr.max_days_to_expire asc
+                    limit 1
+                ), 1.00),
+                2
+            ) as currentPrice,
+            b.status
+        from inventory_batch b
+        left join product p on p.id = b.product_id
+        where b.id = #{id}
+    </select>
+
+    <select id="findDataById" resultType="com.shelfflow.services.admin.inventorybatch.persistence.dataobject.InventoryBatchDataObject">
+        select
+            id,
+            product_id as productId,
+            batch_code as batchCode,
+            production_time as productionTime,
+            expiration_time as expirationTime,
+            stock_quantity as stockQuantity,
+            locked_quantity as lockedQuantity,
+            sold_quantity as soldQuantity,
+            status,
+            create_time as createTime,
+            update_time as updateTime,
+            create_user as createUser,
+            update_user as updateUser
+        from inventory_batch
+        where id = #{id}
+    </select>
+
+    <select id="findIdByBatchCode" resultType="long">
+        select id
+        from inventory_batch
+        where batch_code = #{batchCode}
+        limit 1
+    </select>
+
+    <select id="existsProduct" resultType="boolean">
+        select exists(
+            select 1
+            from product
+            where id = #{productId}
+        )
+    </select>
+
+    <insert id="insert" parameterType="com.shelfflow.services.admin.inventorybatch.persistence.dataobject.InventoryBatchDataObject"
+            useGeneratedKeys="true" keyProperty="id">
+        insert into inventory_batch(
+            product_id,
+            batch_code,
+            production_time,
+            expiration_time,
+            stock_quantity,
+            locked_quantity,
+            sold_quantity,
+            status,
+            create_time,
+            update_time,
+            create_user,
+            update_user
+        ) values (
+            #{productId},
+            #{batchCode},
+            #{productionTime},
+            #{expirationTime},
+            #{stockQuantity},
+            #{lockedQuantity},
+            #{soldQuantity},
+            #{status},
+            #{createTime},
+            #{updateTime},
+            #{createUser},
+            #{updateUser}
+        )
+    </insert>
+
+    <update id="update" parameterType="com.shelfflow.services.admin.inventorybatch.persistence.dataobject.InventoryBatchDataObject">
+        update inventory_batch
+        set
+            product_id = #{productId},
+            batch_code = #{batchCode},
+            production_time = #{productionTime},
+            expiration_time = #{expirationTime},
+            stock_quantity = #{stockQuantity},
+            status = #{status},
+            update_time = #{updateTime},
+            update_user = #{updateUser}
+        where id = #{id}
+    </update>
+
+    <update id="updateStatus">
+        update inventory_batch
+        set
+            status = #{status},
+            update_time = #{updateTime},
+            update_user = #{updateUser}
+        where id = #{id}
+    </update>
+
+    <delete id="deleteById">
+        delete from inventory_batch
+        where id = #{id}
+    </delete>
+
+    <update id="restoreSaleableBatches">
+        update inventory_batch
+        set status = 1,
+            update_time = now()
+        where status = 2
+          and stock_quantity - locked_quantity - sold_quantity &gt; 0
+          and expiration_time &gt; now()
+    </update>
+
+    <update id="markExpiredBatches">
+        update inventory_batch
+        set status = 3,
+            update_time = now()
+        where status = 1
+          and expiration_time &lt;= now()
+    </update>
+
+    <update id="markSoldOutBatches">
+        update inventory_batch
+        set status = 2,
+            update_time = now()
+        where status = 1
+          and stock_quantity - locked_quantity - sold_quantity &lt;= 0
+          and expiration_time &gt; now()
+    </update>
+</mapper>

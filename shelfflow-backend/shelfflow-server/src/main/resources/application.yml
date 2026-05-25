@@ -1,0 +1,68 @@
+server:
+  port: ${SHELFFLOW_BACKEND_PORT:${shelfflow.server.port}}
+
+spring:
+  profiles:
+    active: dev
+  main:
+    allow-circular-references: true
+  datasource:
+    druid:
+      driver-class-name: ${shelfflow.datasource.driver-class-name}
+      url: jdbc:mysql://${shelfflow.datasource.host}:${shelfflow.datasource.port}/${shelfflow.datasource.database}?serverTimezone=Asia/Shanghai&useUnicode=true&characterEncoding=utf-8&zeroDateTimeBehavior=convertToNull&useSSL=false&allowPublicKeyRetrieval=true
+      username: ${shelfflow.datasource.username}
+      password: ${shelfflow.datasource.password}
+  redis:
+    host: ${shelfflow.redis.host}
+    port: ${shelfflow.redis.port}
+    password: ${shelfflow.redis.password}
+    database: ${shelfflow.redis.database}
+
+
+mybatis:
+  #mapper配置文件
+  mapper-locations: classpath:mapper/*.xml
+  type-aliases-package: com.shelfflow.entity
+  configuration:
+    #开启驼峰命名
+    map-underscore-to-camel-case: true
+
+logging:
+  level:
+    com:
+      shelfflow:
+        mapper: debug
+        service: info
+        controller: info
+
+shelfflow:
+  jwt:
+    # 设置jwt签名加密时使用的秘钥
+    admin-secret-key: ${JWT_SECRET}
+    # 设置jwt过期时间
+    admin-ttl: 7200000  #2h*60*60*1000
+    # 设置前端传递过来的令牌名称
+    admin-token-name: token
+
+    user-secret-key: ${JWT_SECRET}
+    user-ttl: 7200000
+    user-token-name: authentication
+  alioss:
+    endpoint: ${shelfflow.alioss.endpoint}
+    access-key-id: ${shelfflow.alioss.access-key-id}
+    access-key-secret: ${shelfflow.alioss.access-key-secret}
+    bucket-name: ${shelfflow.alioss.bucket-name}
+  wechat:
+    appid: ${shelfflow.wechat.appid}
+    secret: ${shelfflow.wechat.secret}
+    mchid : ${shelfflow.wechat.mchid}
+    mchSerialNo: ${shelfflow.wechat.mchSerialNo}
+    privateKeyFilePath: ${shelfflow.wechat.privateKeyFilePath}
+    apiv3Key: ${shelfflow.wechat.apiv3Key}
+    weChatPayCertFilePath: ${shelfflow.wechat.weChatPayCertFilePath}
+    notifyUrl: ${shelfflow.wechat.notifyUrl}
+    refundNotifyUrl: ${shelfflow.wechat.refundNotifyUrl}
+  pickup-point:
+    address: ${shelfflow.pickup-point.address}
+  baidu:
+    ak: ${shelfflow.baidu.ak}

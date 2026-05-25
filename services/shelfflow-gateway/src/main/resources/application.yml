@@ -1,0 +1,67 @@
+server:
+  port: ${APP_PORT:${SHELFFLOW_GATEWAY_PORT:4010}}
+
+spring:
+  application:
+    name: ${APP_NAME:shelfflow-gateway}
+  cloud:
+    nacos:
+      discovery:
+        enabled: ${SHELFFLOW_NACOS_ENABLED:false}
+        server-addr: ${SHELFFLOW_NACOS_SERVER_ADDR:127.0.0.1:8848}
+    gateway:
+      routes:
+        - id: auth-service
+          uri: ${SHELFFLOW_AUTH_SERVICE_BASE_URL:${AUTH_SERVICE_BASE_URL:http://127.0.0.1:4011}}
+          predicates:
+            - Path=/api/admin/auth/**
+        - id: admin-service-products
+          uri: ${SHELFFLOW_ADMIN_SERVICE_BASE_URL:${ADMIN_SERVICE_BASE_URL:http://127.0.0.1:4012}}
+          predicates:
+            - Path=/api/admin/products/**
+        - id: admin-service-batches
+          uri: ${SHELFFLOW_ADMIN_SERVICE_BASE_URL:${ADMIN_SERVICE_BASE_URL:http://127.0.0.1:4012}}
+          predicates:
+            - Path=/api/admin/inventory-batches/**
+        - id: admin-service-orders
+          uri: ${SHELFFLOW_ADMIN_SERVICE_BASE_URL:${ADMIN_SERVICE_BASE_URL:http://127.0.0.1:4012}}
+          predicates:
+            - Path=/api/admin/orders/**
+        - id: admin-service-pricing-rules
+          uri: ${SHELFFLOW_ADMIN_SERVICE_BASE_URL:${ADMIN_SERVICE_BASE_URL:http://127.0.0.1:4012}}
+          predicates:
+            - Path=/api/admin/pricing-rules/**
+        - id: admin-service-loss-stats
+          uri: ${SHELFFLOW_ADMIN_SERVICE_BASE_URL:${ADMIN_SERVICE_BASE_URL:http://127.0.0.1:4012}}
+          predicates:
+            - Path=/api/admin/loss-stats/**
+        - id: admin-service-ai-ops
+          uri: ${SHELFFLOW_ADMIN_SERVICE_BASE_URL:${ADMIN_SERVICE_BASE_URL:http://127.0.0.1:4012}}
+          predicates:
+            - Path=/api/admin/ai-ops/**
+        - id: user-service
+          uri: ${SHELFFLOW_USER_SERVICE_BASE_URL:${USER_SERVICE_BASE_URL:http://127.0.0.1:4013}}
+          predicates:
+            - Path=/api/user/**
+
+shelfflow:
+  runtime:
+    app-name: ${APP_NAME:shelfflow-gateway}
+    app-env: ${APP_ENV:development}
+    log-level: ${LOG_LEVEL:INFO}
+    api-prefix: ${API_PREFIX:/api}
+    cors-allowed-origins: ${CORS_ALLOWED_ORIGINS:http://127.0.0.1:3000}
+  jwt:
+    secret: ${JWT_SECRET:dev-shelfflow-jwt-secret-change-me}
+    expires-in: ${JWT_EXPIRES_IN:PT12H}
+  downstream:
+    auth-service-base-url: ${SHELFFLOW_AUTH_SERVICE_BASE_URL:${AUTH_SERVICE_BASE_URL:http://127.0.0.1:4011}}
+    admin-service-base-url: ${SHELFFLOW_ADMIN_SERVICE_BASE_URL:${ADMIN_SERVICE_BASE_URL:http://127.0.0.1:4012}}
+    user-service-base-url: ${SHELFFLOW_USER_SERVICE_BASE_URL:${USER_SERVICE_BASE_URL:http://127.0.0.1:4013}}
+
+management:
+  endpoints:
+    web:
+      base-path: /
+      exposure:
+        include: health,info

@@ -1,0 +1,200 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd" >
+
+<mapper namespace="com.shelfflow.services.admin.lossstats.persistence.AdminLossStatsPersistenceMapper">
+
+    <select id="overview" resultType="com.shelfflow.services.admin.lossstats.persistence.dataobject.AdminLossStatsOverviewRow">
+        select
+            count(1) as totalBatchCount,
+            coalesce(sum(b.stock_quantity), 0) as totalStockQuantity,
+            coalesce(sum(case when b.expiration_time &lt; now() or b.status = 3 then 1 else 0 end), 0) as expiredBatchCount,
+            coalesce(sum(case
+                when b.expiration_time &lt; now() or b.status = 3
+                    then greatest(b.stock_quantity - b.locked_quantity - b.sold_quantity, 0)
+                else 0
+            end), 0) as expiredStockQuantity,
+            coalesce(sum(case
+                when b.expiration_time &gt;= now()
+                    and b.expiration_time &lt; date_add(now(), interval #{expiringSoonDays} day)
+                    and b.status != 0
+                    and greatest(b.stock_quantity - b.locked_quantity - b.sold_quantity, 0) &gt; 0
+                    then 1
+                else 0
+            end), 0) as expiringSoonBatchCount,
+            coalesce(sum(case
+                when b.expiration_time &gt;= now()
+                    and b.expiration_time &lt; date_add(now(), interval #{expiringSoonDays} day)
+                    and b.status != 0
+                    then greatest(b.stock_quantity - b.locked_quantity - b.sold_quantity, 0)
+                else 0
+            end), 0) as expiringSoonStockQuantity,
+            coalesce(sum(case when b.status = 2 or b.stock_quantity &lt;= b.sold_quantity then 1 else 0 end), 0) as soldOutBatchCount,
+            coalesce(sum(case
+                when b.status in (1, 2)
+                    then greatest(b.stock_quantity - b.locked_quantity - b.sold_quantity, 0)
+                else 0
+            end), 0) as saleableStockQuantity,
+            coalesce(sum(case
+                when b.expiration_time &lt; now() or b.status = 3
+                    then greatest(b.stock_quantity - b.locked_quantity - b.sold_quantity, 0) * p.price
+                else 0
+            end), 0) as estimatedLossAmount,
+            (select coalesce(sum(o.amount), 0) from orders o where o.pay_status = 1) as revenueAmount,
+            (select count(1) from orders) as orderCount,
+            (select count(1) from orders o where o.pay_status = 1) as paidOrderCount,
+            (select coalesce(sum(od.number), 0) from order_detail od inner join orders o on o.id = od.order_id where o.pay_status = 1) as soldItemQuantity,
+            (select coalesce(avg(o.amount), 0) from orders o where o.pay_status = 1) as averageOrderAmount
+        from inventory_batch b
+        left join product p on p.id = b.product_id
+    </select>
+
+    <select id="overview" databaseId="h2" resultType="com.shelfflow.services.admin.lossstats.persistence.dataobject.AdminLossStatsOverviewRow">
+        select
+            count(1) as totalBatchCount,
+            coalesce(sum(b.stock_quantity), 0) as totalStockQuantity,
+            coalesce(sum(case when b.expiration_time &lt; now() or b.status = 3 then 1 else 0 end), 0) as expiredBatchCount,
+            coalesce(sum(case
+                when b.expiration_time &lt; now() or b.status = 3
+                    then greatest(b.stock_quantity - b.locked_quantity - b.sold_quantity, 0)
+                else 0
+            end), 0) as expiredStockQuantity,
+            coalesce(sum(case
+                when b.expiration_time &gt;= now()
+                    and b.expiration_time &lt; dateadd('DAY', #{expiringSoonDays}, now())
+                    and b.status != 0
+                    and greatest(b.stock_quantity - b.locked_quantity - b.sold_quantity, 0) &gt; 0
+                    then 1
+                else 0
+            end), 0) as expiringSoonBatchCount,
+            coalesce(sum(case
+                when b.expiration_time &gt;= now()
+                    and b.expiration_time &lt; dateadd('DAY', #{expiringSoonDays}, now())
+                    and b.status != 0
+                    then greatest(b.stock_quantity - b.locked_quantity - b.sold_quantity, 0)
+                else 0
+            end), 0) as expiringSoonStockQuantity,
+            coalesce(sum(case when b.status = 2 or b.stock_quantity &lt;= b.sold_quantity then 1 else 0 end), 0) as soldOutBatchCount,
+            coalesce(sum(case
+                when b.status in (1, 2)
+                    then greatest(b.stock_quantity - b.locked_quantity - b.sold_quantity, 0)
+                else 0
+            end), 0) as saleableStockQuantity,
+            coalesce(sum(case
+                when b.expiration_time &lt; now() or b.status = 3
+                    then greatest(b.stock_quantity - b.locked_quantity - b.sold_quantity, 0) * p.price
+                else 0
+            end), 0) as estimatedLossAmount,
+            (select coalesce(sum(o.amount), 0) from orders o where o.pay_status = 1) as revenueAmount,
+            (select count(1) from orders) as orderCount,
+            (select count(1) from orders o where o.pay_status = 1) as paidOrderCount,
+            (select coalesce(sum(od.number), 0) from order_detail od inner join orders o on o.id = od.order_id where o.pay_status = 1) as soldItemQuantity,
+            (select coalesce(avg(o.amount), 0) from orders o where o.pay_status = 1) as averageOrderAmount
+        from inventory_batch b
+        left join product p on p.id = b.product_id
+    </select>
+
+    <select id="categoryStats" resultType="com.shelfflow.services.admin.lossstats.persistence.dataobject.AdminLossStatsCategoryRow">
+        select
+            c.id as categoryId,
+            c.name as categoryName,
+            count(1) as batchCount,
+            coalesce(sum(b.stock_quantity), 0) as totalStockQuantity,
+            coalesce(sum(case
+                when b.expiration_time &gt;= now()
+                    and b.expiration_time &lt; date_add(now(), interval #{expiringSoonDays} day)
+                    and b.status != 0
+                    and greatest(b.stock_quantity - b.locked_quantity - b.sold_quantity, 0) &gt; 0
+                    then 1
+                else 0
+            end), 0) as expiringSoonBatchCount,
+            coalesce(sum(case when b.status = 2 or b.stock_quantity &lt;= b.sold_quantity then 1 else 0 end), 0) as soldOutBatchCount,
+            coalesce(sum(case
+                when b.expiration_time &lt; now() or b.status = 3
+                    then greatest(b.stock_quantity - b.locked_quantity - b.sold_quantity, 0)
+                else 0
+            end), 0) as expiredStockQuantity,
+            coalesce(sum(case
+                when b.expiration_time &lt; now() or b.status = 3
+                    then greatest(b.stock_quantity - b.locked_quantity - b.sold_quantity, 0) * p.price
+                else 0
+            end), 0) as estimatedLossAmount
+        from inventory_batch b
+        left join product p on p.id = b.product_id
+        left join category c on c.id = p.category_id
+        group by c.id, c.name
+        order by estimatedLossAmount desc, batchCount desc
+    </select>
+
+    <select id="categoryStats" databaseId="h2" resultType="com.shelfflow.services.admin.lossstats.persistence.dataobject.AdminLossStatsCategoryRow">
+        select
+            c.id as categoryId,
+            c.name as categoryName,
+            count(1) as batchCount,
+            coalesce(sum(b.stock_quantity), 0) as totalStockQuantity,
+            coalesce(sum(case
+                when b.expiration_time &gt;= now()
+                    and b.expiration_time &lt; dateadd('DAY', #{expiringSoonDays}, now())
+                    and b.status != 0
+                    and greatest(b.stock_quantity - b.locked_quantity - b.sold_quantity, 0) &gt; 0
+                    then 1
+                else 0
+            end), 0) as expiringSoonBatchCount,
+            coalesce(sum(case when b.status = 2 or b.stock_quantity &lt;= b.sold_quantity then 1 else 0 end), 0) as soldOutBatchCount,
+            coalesce(sum(case
+                when b.expiration_time &lt; now() or b.status = 3
+                    then greatest(b.stock_quantity - b.locked_quantity - b.sold_quantity, 0)
+                else 0
+            end), 0) as expiredStockQuantity,
+            coalesce(sum(case
+                when b.expiration_time &lt; now() or b.status = 3
+                    then greatest(b.stock_quantity - b.locked_quantity - b.sold_quantity, 0) * p.price
+                else 0
+            end), 0) as estimatedLossAmount
+        from inventory_batch b
+        left join product p on p.id = b.product_id
+        left join category c on c.id = p.category_id
+        group by c.id, c.name
+        order by estimatedLossAmount desc, batchCount desc
+    </select>
+
+    <select id="suggestions" resultType="com.shelfflow.services.admin.lossstats.persistence.dataobject.AdminLossStatsSuggestionRow">
+        select
+            b.id as batchId,
+            b.batch_code as batchCode,
+            p.id as productId,
+            p.name as productName,
+            c.name as categoryName,
+            datediff(b.expiration_time, now()) as daysToExpire,
+            greatest(b.stock_quantity - b.locked_quantity - b.sold_quantity, 0) as availableStock,
+            greatest(b.stock_quantity - b.locked_quantity - b.sold_quantity, 0) * p.price as estimatedLossAmount
+        from inventory_batch b
+        left join product p on p.id = b.product_id
+        left join category c on c.id = p.category_id
+        where b.status != 0
+          and greatest(b.stock_quantity - b.locked_quantity - b.sold_quantity, 0) &gt; 0
+          and b.expiration_time &lt; date_add(now(), interval #{expiringSoonDays} day)
+        order by daysToExpire asc, estimatedLossAmount desc, b.id desc
+        limit #{limit}
+    </select>
+
+    <select id="suggestions" databaseId="h2" resultType="com.shelfflow.services.admin.lossstats.persistence.dataobject.AdminLossStatsSuggestionRow">
+        select
+            b.id as batchId,
+            b.batch_code as batchCode,
+            p.id as productId,
+            p.name as productName,
+            c.name as categoryName,
+            datediff('DAY', now(), b.expiration_time) as daysToExpire,
+            greatest(b.stock_quantity - b.locked_quantity - b.sold_quantity, 0) as availableStock,
+            greatest(b.stock_quantity - b.locked_quantity - b.sold_quantity, 0) * p.price as estimatedLossAmount
+        from inventory_batch b
+        left join product p on p.id = b.product_id
+        left join category c on c.id = p.category_id
+        where b.status != 0
+          and greatest(b.stock_quantity - b.locked_quantity - b.sold_quantity, 0) &gt; 0
+          and b.expiration_time &lt; dateadd('DAY', #{expiringSoonDays}, now())
+        order by daysToExpire asc, estimatedLossAmount desc, b.id desc
+        limit #{limit}
+    </select>
+</mapper>

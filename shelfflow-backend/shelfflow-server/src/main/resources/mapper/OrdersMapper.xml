@@ -1,0 +1,123 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd" >
+<mapper namespace="com.shelfflow.mapper.OrdersMapper">
+    <insert id="insert" parameterType="com.shelfflow.entity.Orders" useGeneratedKeys="true" keyProperty="id">
+        INSERT INTO orders(number, status, user_id, pickup_contact_id, order_time, checkout_time, pay_method, pay_status, amount, remark, phone, pickup_point, user_name, consignee, cancel_reason, rejection_reason, cancel_time, preparation_mode, completed_time, fulfillment_fee, package_count, package_strategy, fulfillment_type, pickup_code, pickup_time, pickup_deadline, verify_time, verify_staff_id)
+        VALUES(#{number}, #{status}, #{userId}, #{pickupContactId}, #{orderTime}, #{checkoutTime}, #{payMethod}, #{payStatus}, #{amount}, #{remark}, #{phone}, #{pickupPoint}, #{userName}, #{consignee}, #{cancelReason}, #{rejectionReason}, #{cancelTime}, #{preparationMode}, #{completedTime}, #{fulfillmentFee}, #{packageCount}, #{packageStrategy}, #{fulfillmentType}, #{pickupCode}, #{pickupTime}, #{pickupDeadline}, #{verifyTime}, #{verifyStaffId})
+    </insert>
+
+    <update id="updateByNumberAndUserId" parameterType="com.shelfflow.entity.Orders">
+        update orders
+        <set>
+            <if test="payStatus != null">
+                pay_status = #{payStatus},
+            </if>
+            <if test="status != null">
+                status = #{status},
+            </if>
+            <if test="checkoutTime != null">
+                checkout_time = #{checkoutTime},
+            </if>
+        </set>
+        where number = #{number}
+    </update>
+
+    <select id="ordersPageQuery" parameterType="com.shelfflow.dto.OrdersPageQueryDTO" resultType="com.shelfflow.entity.Orders">
+        select * from orders
+        <where>
+            <if test="number != null">
+                and number = #{number}
+            </if>
+            <if test="phone != null">
+                and phone like concat('%',#{phone},'%')
+            </if>
+            <if test="beginTime != null">
+                and order_time &gt;= #{beginTime}
+            </if>
+            <if test="status != null">
+                and status = #{status}
+            </if>
+            <if test="endTime != null">
+                and order_time &lt;= #{endTime}
+            </if>
+            <if test="userId != null">
+                and user_id = #{userId}
+            </if>
+        </where>
+        order by order_time desc
+    </select>
+
+    <update id="updateById" parameterType="com.shelfflow.entity.Orders">
+        update orders
+        <set>
+            <if test="payStatus != null">
+                pay_status = #{payStatus},
+            </if>
+            <if test="status != null">
+                status = #{status},
+            </if>
+            <if test="cancelTime != null">
+                cancel_time = #{cancelTime},
+            </if>
+            <if test="cancelReason != null">
+                cancel_reason = #{cancelReason},
+            </if>
+            <if test="rejectionReason != null">
+                rejection_reason = #{rejectionReason},
+            </if>
+            <if test="completedTime != null">
+                completed_time = #{completedTime},
+            </if>
+            <if test="pickupCode != null">
+                pickup_code = #{pickupCode},
+            </if>
+            <if test="pickupTime != null">
+                pickup_time = #{pickupTime},
+            </if>
+            <if test="pickupDeadline != null">
+                pickup_deadline = #{pickupDeadline},
+            </if>
+            <if test="verifyTime != null">
+                verify_time = #{verifyTime},
+            </if>
+            <if test="verifyStaffId != null">
+                verify_staff_id = #{verifyStaffId},
+            </if>
+        </set>
+        where id=#{id}
+    </update>
+
+    <select id="getFlowAmountByMap" parameterType="java.util.Map" resultType="java.lang.Double">
+        select sum(amount) from orders
+        #如果没有结果，count为0.但是为了防御性处理，还是返回Double而不是double
+
+        <where>
+            <if test="beginTime != null">
+                and order_time &gt;= #{beginTime}
+            </if>
+            <if test="endTime != null">
+                and order_time &lt;= #{endTime}
+            </if>
+            <if test="status != null">
+                and status = #{status}
+            </if>
+        </where>
+    </select>
+
+    <select id="getOrdersByMap" parameterType="java.util.Map" resultType="java.lang.Integer">
+        select count(id) from orders
+        <where>
+            <if test="beginTime != null">
+                and order_time &gt;= #{beginTime}
+            </if>
+            <if test="endTime != null">
+                and order_time &lt;= #{endTime}
+            </if>
+            <if test="status != null">
+                and status = #{status}
+            </if>
+        </where>
+    </select>
+
+</mapper>

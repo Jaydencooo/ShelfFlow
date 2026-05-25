@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd" >
+
+<mapper namespace="com.shelfflow.mapper.PricingRuleMapper">
+    <insert id="insert" parameterType="com.shelfflow.entity.PricingRule" useGeneratedKeys="true" keyProperty="id">
+        insert into pricing_rule(name, min_days_to_expire, max_days_to_expire, discount_rate, priority, status, create_time, update_time, create_user, update_user)
+        values (#{name}, #{minDaysToExpire}, #{maxDaysToExpire}, #{discountRate}, #{priority}, #{status}, #{createTime}, #{updateTime}, #{createUser}, #{updateUser})
+    </insert>
+
+    <update id="update" parameterType="com.shelfflow.entity.PricingRule">
+        update pricing_rule
+        <set>
+            <if test="name != null">name = #{name},</if>
+            <if test="minDaysToExpire != null">min_days_to_expire = #{minDaysToExpire},</if>
+            <if test="maxDaysToExpire != null">max_days_to_expire = #{maxDaysToExpire},</if>
+            <if test="discountRate != null">discount_rate = #{discountRate},</if>
+            <if test="priority != null">priority = #{priority},</if>
+            <if test="status != null">status = #{status},</if>
+            <if test="updateTime != null">update_time = #{updateTime},</if>
+            <if test="updateUser != null">update_user = #{updateUser},</if>
+        </set>
+        where id = #{id}
+    </update>
+
+    <select id="pageQuery" resultType="com.shelfflow.vo.PricingRuleVO">
+        select * from pricing_rule
+        <where>
+            <if test="name != null and name != ''">and name like concat('%', #{name}, '%')</if>
+            <if test="status != null">and status = #{status}</if>
+        </where>
+        order by priority desc, id desc
+    </select>
+</mapper>

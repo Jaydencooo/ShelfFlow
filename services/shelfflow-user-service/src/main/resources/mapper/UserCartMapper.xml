@@ -1,0 +1,163 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd" >
+
+<mapper namespace="com.shelfflow.services.user.cart.persistence.UserCartPersistenceMapper">
+
+    <select id="listByUserId" resultType="com.shelfflow.services.user.cart.persistence.dataobject.UserCartItemRow">
+        select
+            ci.id,
+            ci.product_id as productId,
+            ci.batch_id as batchId,
+            ci.name,
+            ci.image,
+            ci.product_spec as productSpec,
+            ci.number,
+            ci.amount,
+            ci.create_time as createTime,
+            case
+                when ib.id is null then 0
+                else greatest(ib.stock_quantity - ib.locked_quantity - ib.sold_quantity, 0)
+            end as availableQuantity,
+            ib.expiration_time as expirationTime
+        from cart_item ci
+        left join inventory_batch ib on ib.id = ci.batch_id
+        where ci.user_id = #{userId}
+        order by ci.create_time desc, ci.id desc
+    </select>
+
+    <select id="listByUserId" databaseId="h2" resultType="com.shelfflow.services.user.cart.persistence.dataobject.UserCartItemRow">
+        select
+            ci.id,
+            ci.product_id as productId,
+            ci.batch_id as batchId,
+            ci.name,
+            ci.image,
+            ci.product_spec as productSpec,
+            ci.number,
+            ci.amount,
+            ci.create_time as createTime,
+            case
+                when ib.id is null then 0
+                else case when (ib.stock_quantity - ib.locked_quantity - ib.sold_quantity) &lt; 0 then 0 else (ib.stock_quantity - ib.locked_quantity - ib.sold_quantity) end
+            end as availableQuantity,
+            ib.expiration_time as expirationTime
+        from cart_item ci
+        left join inventory_batch ib on ib.id = ci.batch_id
+        where ci.user_id = #{userId}
+        order by ci.create_time desc, ci.id desc
+    </select>
+
+    <select id="findBySelection" resultType="com.shelfflow.services.user.cart.persistence.dataobject.UserCartItemDataObject">
+        select
+            id,
+            user_id as userId,
+            product_id as productId,
+            batch_id as batchId,
+            name,
+            image,
+            product_spec as productSpec,
+            number,
+            amount,
+            create_time as createTime
+        from cart_item
+        where user_id = #{userId}
+          and product_id = #{productId}
+          and batch_id = #{batchId}
+          and (
+            (#{productSpec} is null and product_spec is null)
+            or product_spec = #{productSpec}
+          )
+        limit 1
+    </select>
+
+    <select id="findRowByIdAndUserId" resultType="com.shelfflow.services.user.cart.persistence.dataobject.UserCartItemRow">
+        select
+            ci.id,
+            ci.product_id as productId,
+            ci.batch_id as batchId,
+            ci.name,
+            ci.image,
+            ci.product_spec as productSpec,
+            ci.number,
+            ci.amount,
+            ci.create_time as createTime,
+            case
+                when ib.id is null then 0
+                else greatest(ib.stock_quantity - ib.locked_quantity - ib.sold_quantity, 0)
+            end as availableQuantity,
+            ib.expiration_time as expirationTime
+        from cart_item ci
+        left join inventory_batch ib on ib.id = ci.batch_id
+        where ci.id = #{id}
+          and ci.user_id = #{userId}
+        limit 1
+    </select>
+
+    <select id="findRowByIdAndUserId" databaseId="h2" resultType="com.shelfflow.services.user.cart.persistence.dataobject.UserCartItemRow">
+        select
+            ci.id,
+            ci.product_id as productId,
+            ci.batch_id as batchId,
+            ci.name,
+            ci.image,
+            ci.product_spec as productSpec,
+            ci.number,
+            ci.amount,
+            ci.create_time as createTime,
+            case
+                when ib.id is null then 0
+                else case when (ib.stock_quantity - ib.locked_quantity - ib.sold_quantity) &lt; 0 then 0 else (ib.stock_quantity - ib.locked_quantity - ib.sold_quantity) end
+            end as availableQuantity,
+            ib.expiration_time as expirationTime
+        from cart_item ci
+        left join inventory_batch ib on ib.id = ci.batch_id
+        where ci.id = #{id}
+          and ci.user_id = #{userId}
+        limit 1
+    </select>
+
+    <insert id="insert" parameterType="com.shelfflow.services.user.cart.persistence.dataobject.UserCartItemDataObject"
+            useGeneratedKeys="true" keyProperty="id">
+        insert into cart_item(
+            name,
+            image,
+            user_id,
+            product_id,
+            batch_id,
+            product_spec,
+            number,
+            amount,
+            create_time
+        ) values (
+            #{name},
+            #{image},
+            #{userId},
+            #{productId},
+            #{batchId},
+            #{productSpec},
+            #{number},
+            #{amount},
+            #{createTime}
+        )
+    </insert>
+
+    <update id="updateQuantityById" parameterType="com.shelfflow.services.user.cart.persistence.dataobject.UserCartItemDataObject">
+        update cart_item
+        set
+            number = #{number},
+            amount = #{amount}
+        where id = #{id}
+    </update>
+
+    <delete id="deleteByIdAndUserId">
+        delete from cart_item
+        where id = #{id}
+          and user_id = #{userId}
+    </delete>
+
+    <delete id="clearByUserId">
+        delete from cart_item
+        where user_id = #{userId}
+    </delete>
+</mapper>

@@ -1,0 +1,252 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd" >
+
+<mapper namespace="com.shelfflow.services.admin.order.persistence.AdminOrderPersistenceMapper">
+
+    <select id="pageOrders" resultType="com.shelfflow.services.admin.order.persistence.dataobject.AdminOrderSummaryRow">
+        select
+            o.id,
+            o.number,
+            o.status,
+            o.pay_status as payStatus,
+            o.user_id as userId,
+            o.user_name as userName,
+            o.consignee,
+            o.phone,
+            o.amount,
+            o.pickup_code as pickupCode,
+            o.order_time as orderTime,
+            o.checkout_time as checkoutTime,
+            o.pickup_deadline as pickupDeadline,
+            coalesce(sum(od.number), 0) as itemCount
+        from orders o
+        left join order_detail od on od.order_id = o.id
+        where 1 = 1
+        <if test="keyword != null">
+            and (
+                cast(o.id as char) like concat('%', #{keyword}, '%')
+                or o.number like concat('%', #{keyword}, '%')
+                or o.phone like concat('%', #{keyword}, '%')
+                or o.consignee like concat('%', #{keyword}, '%')
+                or o.pickup_code like concat('%', #{keyword}, '%')
+            )
+        </if>
+        <if test="status != null">
+            and o.status = #{status}
+        </if>
+        <if test="payStatus != null">
+            and o.pay_status = #{payStatus}
+        </if>
+        group by
+            o.id,
+            o.number,
+            o.status,
+            o.pay_status,
+            o.user_id,
+            o.user_name,
+            o.consignee,
+            o.phone,
+            o.amount,
+            o.pickup_code,
+            o.order_time,
+            o.checkout_time,
+            o.pickup_deadline
+        order by ${sortColumn} ${sortOrder}, o.id desc
+        limit #{pageSize} offset #{offset}
+    </select>
+
+    <select id="pageOrders" databaseId="h2" resultType="com.shelfflow.services.admin.order.persistence.dataobject.AdminOrderSummaryRow">
+        select
+            o.id,
+            o.number,
+            o.status,
+            o.pay_status as payStatus,
+            o.user_id as userId,
+            o.user_name as userName,
+            o.consignee,
+            o.phone,
+            o.amount,
+            o.pickup_code as pickupCode,
+            o.order_time as orderTime,
+            o.checkout_time as checkoutTime,
+            o.pickup_deadline as pickupDeadline,
+            coalesce(sum(od.number), 0) as itemCount
+        from orders o
+        left join order_detail od on od.order_id = o.id
+        where 1 = 1
+        <if test="keyword != null">
+            and (
+                cast(o.id as varchar) like '%' || #{keyword} || '%'
+                or o.number like '%' || #{keyword} || '%'
+                or o.phone like '%' || #{keyword} || '%'
+                or o.consignee like '%' || #{keyword} || '%'
+                or o.pickup_code like '%' || #{keyword} || '%'
+            )
+        </if>
+        <if test="status != null">
+            and o.status = #{status}
+        </if>
+        <if test="payStatus != null">
+            and o.pay_status = #{payStatus}
+        </if>
+        group by
+            o.id,
+            o.number,
+            o.status,
+            o.pay_status,
+            o.user_id,
+            o.user_name,
+            o.consignee,
+            o.phone,
+            o.amount,
+            o.pickup_code,
+            o.order_time,
+            o.checkout_time,
+            o.pickup_deadline
+        order by ${sortColumn} ${sortOrder}, o.id desc
+        limit #{pageSize} offset #{offset}
+    </select>
+
+    <select id="countOrders" resultType="long">
+        select count(1)
+        from orders o
+        where 1 = 1
+        <if test="keyword != null">
+            and (
+                cast(o.id as char) like concat('%', #{keyword}, '%')
+                or o.number like concat('%', #{keyword}, '%')
+                or o.phone like concat('%', #{keyword}, '%')
+                or o.consignee like concat('%', #{keyword}, '%')
+                or o.pickup_code like concat('%', #{keyword}, '%')
+            )
+        </if>
+        <if test="status != null">
+            and o.status = #{status}
+        </if>
+        <if test="payStatus != null">
+            and o.pay_status = #{payStatus}
+        </if>
+    </select>
+
+    <select id="countOrders" databaseId="h2" resultType="long">
+        select count(1)
+        from orders o
+        where 1 = 1
+        <if test="keyword != null">
+            and (
+                cast(o.id as varchar) like '%' || #{keyword} || '%'
+                or o.number like '%' || #{keyword} || '%'
+                or o.phone like '%' || #{keyword} || '%'
+                or o.consignee like '%' || #{keyword} || '%'
+                or o.pickup_code like '%' || #{keyword} || '%'
+            )
+        </if>
+        <if test="status != null">
+            and o.status = #{status}
+        </if>
+        <if test="payStatus != null">
+            and o.pay_status = #{payStatus}
+        </if>
+    </select>
+
+    <select id="findOrderById" resultType="com.shelfflow.services.admin.order.persistence.dataobject.AdminOrderDetailRow">
+        select
+            o.id,
+            o.number,
+            o.status,
+            o.pay_status as payStatus,
+            o.user_id as userId,
+            o.user_name as userName,
+            o.consignee,
+            o.phone,
+            o.amount,
+            o.remark,
+            o.pickup_point as pickupPoint,
+            o.pickup_code as pickupCode,
+            o.order_time as orderTime,
+            o.checkout_time as checkoutTime,
+            o.pickup_deadline as pickupDeadline,
+            o.cancel_time as cancelTime,
+            o.cancel_reason as cancelReason
+        from orders o
+        where o.id = #{id}
+        limit 1
+    </select>
+
+    <select id="listOrderItemsByOrderId" resultType="com.shelfflow.services.admin.order.persistence.dataobject.AdminOrderItemRow">
+        select
+            od.product_id as productId,
+            od.batch_id as batchId,
+            od.name,
+            od.image,
+            od.product_spec as productSpec,
+            od.number,
+            od.amount
+        from order_detail od
+        where od.order_id = #{orderId}
+        order by od.id asc
+    </select>
+
+    <select id="listOrderEventsByOrderId" resultType="com.shelfflow.services.admin.order.persistence.dataobject.AdminOrderEventRow">
+        select
+            id,
+            order_id as orderId,
+            event_type as eventType,
+            actor_type as actorType,
+            actor_id as actorId,
+            from_status as fromStatus,
+            to_status as toStatus,
+            from_pay_status as fromPayStatus,
+            to_pay_status as toPayStatus,
+            note,
+            create_time as createTime
+        from order_event_log
+        where order_id = #{orderId}
+        order by create_time asc, id asc
+    </select>
+
+    <update id="updateOrderStatus">
+        update orders
+        set status = #{targetStatus}
+        where id = #{id}
+          and status = #{expectedStatus}
+    </update>
+
+    <update id="settleBatchStock">
+        update inventory_batch
+        set
+            locked_quantity = locked_quantity - #{quantity},
+            sold_quantity = sold_quantity + #{quantity},
+            update_time = #{updateTime}
+        where id = #{batchId}
+          and locked_quantity &gt;= #{quantity}
+    </update>
+
+    <insert id="insertOrderEvent" parameterType="com.shelfflow.services.admin.order.persistence.dataobject.AdminOrderEventRow"
+            useGeneratedKeys="true" keyProperty="id">
+        insert into order_event_log(
+            order_id,
+            event_type,
+            actor_type,
+            actor_id,
+            from_status,
+            to_status,
+            from_pay_status,
+            to_pay_status,
+            note,
+            create_time
+        ) values (
+            #{orderId},
+            #{eventType},
+            #{actorType},
+            #{actorId},
+            #{fromStatus},
+            #{toStatus},
+            #{fromPayStatus},
+            #{toPayStatus},
+            #{note},
+            #{createTime}
+        )
+    </insert>
+</mapper>

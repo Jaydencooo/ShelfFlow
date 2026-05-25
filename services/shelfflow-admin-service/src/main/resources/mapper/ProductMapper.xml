@@ -1,0 +1,296 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd" >
+
+<mapper namespace="com.shelfflow.services.admin.product.persistence.ProductPersistenceMapper">
+
+    <select id="page" resultType="com.shelfflow.services.admin.product.persistence.dataobject.ProductPageRow">
+        select
+            p.id,
+            p.name,
+            p.category_id as categoryId,
+            c.name as categoryName,
+            p.price,
+            p.image,
+            p.description,
+            p.status,
+            min(datediff(ib.expiration_time, now())) as daysToExpire
+        from product p
+        left join category c on c.id = p.category_id
+        left join inventory_batch ib on ib.product_id = p.id
+        <where>
+            and p.status in (0, 1)
+            <if test="criteria.keyword != null">
+                and p.name like concat('%', #{criteria.keyword}, '%')
+            </if>
+            <if test="criteria.categoryId != null">
+                and p.category_id = #{criteria.categoryId}
+            </if>
+            <if test="criteria.status != null">
+                and p.status = #{criteria.status}
+            </if>
+        </where>
+        group by
+            p.id,
+            p.name,
+            p.category_id,
+            c.name,
+            p.price,
+            p.image,
+            p.description,
+            p.status,
+            p.create_time,
+            p.update_time
+        order by ${criteria.sortColumn} ${criteria.sortDirection}, p.id desc
+        limit #{criteria.limit} offset #{criteria.offset}
+    </select>
+
+    <select id="page" databaseId="h2" resultType="com.shelfflow.services.admin.product.persistence.dataobject.ProductPageRow">
+        select
+            p.id,
+            p.name,
+            p.category_id as categoryId,
+            c.name as categoryName,
+            p.price,
+            p.image,
+            p.description,
+            p.status,
+            min(datediff('DAY', now(), ib.expiration_time)) as daysToExpire
+        from product p
+        left join category c on c.id = p.category_id
+        left join inventory_batch ib on ib.product_id = p.id
+        <where>
+            and p.status in (0, 1)
+            <if test="criteria.keyword != null">
+                and p.name like concat('%', #{criteria.keyword}, '%')
+            </if>
+            <if test="criteria.categoryId != null">
+                and p.category_id = #{criteria.categoryId}
+            </if>
+            <if test="criteria.status != null">
+                and p.status = #{criteria.status}
+            </if>
+        </where>
+        group by
+            p.id,
+            p.name,
+            p.category_id,
+            c.name,
+            p.price,
+            p.image,
+            p.description,
+            p.status,
+            p.create_time,
+            p.update_time
+        order by ${criteria.sortColumn} ${criteria.sortDirection}, p.id desc
+        limit #{criteria.limit} offset #{criteria.offset}
+    </select>
+
+    <select id="count" resultType="long">
+        select count(1)
+        from product p
+        <where>
+            and p.status in (0, 1)
+            <if test="criteria.keyword != null">
+                and p.name like concat('%', #{criteria.keyword}, '%')
+            </if>
+            <if test="criteria.categoryId != null">
+                and p.category_id = #{criteria.categoryId}
+            </if>
+            <if test="criteria.status != null">
+                and p.status = #{criteria.status}
+            </if>
+        </where>
+    </select>
+
+    <select id="listActiveProductCategories" resultType="com.shelfflow.services.admin.product.persistence.dataobject.ProductCategoryRow">
+        select
+            c.id,
+            c.name,
+            c.sort,
+            count(p.id) as productCount
+        from category c
+        left join product p on p.category_id = c.id and p.status in (0, 1)
+        where c.type = 1
+          and c.status = 1
+        group by c.id, c.name, c.sort
+        order by c.sort asc, c.id asc
+    </select>
+
+    <select id="findCategoryById" resultType="com.shelfflow.services.admin.product.persistence.dataobject.ProductCategoryDataObject">
+        select
+            id,
+            type,
+            name,
+            sort,
+            status,
+            create_time as createTime,
+            update_time as updateTime,
+            create_user as createUser,
+            update_user as updateUser
+        from category
+        where id = #{id}
+    </select>
+
+    <select id="findCategoryIdByName" resultType="long">
+        select id
+        from category
+        where name = #{name}
+          and status = 1
+        limit 1
+    </select>
+
+    <select id="findMaxCategorySort" resultType="int">
+        select coalesce(max(sort), 0)
+        from category
+        where type = 1
+          and status = 1
+    </select>
+
+    <select id="findById" resultType="com.shelfflow.services.admin.product.persistence.dataobject.ProductDataObject">
+        select
+            id,
+            name,
+            category_id as categoryId,
+            price,
+            image,
+            description,
+            status,
+            create_time as createTime,
+            update_time as updateTime,
+            create_user as createUser,
+            update_user as updateUser
+        from product
+        where id = #{id}
+    </select>
+
+    <select id="findIdByName" resultType="long">
+        select id
+        from product
+        where name = #{name}
+          and status in (0, 1)
+        limit 1
+    </select>
+
+    <select id="existsCategory" resultType="boolean">
+        select exists(
+            select 1
+            from category
+            where id = #{categoryId}
+              and type = 1
+              and status = 1
+        )
+    </select>
+
+    <select id="countProductsByCategory" resultType="long">
+        select count(1)
+        from product
+        where category_id = #{categoryId}
+          and status in (0, 1)
+    </select>
+
+    <select id="countBatchesByProduct" resultType="long">
+        select count(1)
+        from inventory_batch
+        where product_id = #{productId}
+    </select>
+
+    <insert id="insert" parameterType="com.shelfflow.services.admin.product.persistence.dataobject.ProductDataObject"
+            useGeneratedKeys="true" keyProperty="id">
+        insert into product(
+            name,
+            category_id,
+            price,
+            image,
+            description,
+            status,
+            create_time,
+            update_time,
+            create_user,
+            update_user
+        ) values (
+            #{name},
+            #{categoryId},
+            #{price},
+            #{image},
+            #{description},
+            #{status},
+            #{createTime},
+            #{updateTime},
+            #{createUser},
+            #{updateUser}
+        )
+    </insert>
+
+    <insert id="insertCategory" parameterType="com.shelfflow.services.admin.product.persistence.dataobject.ProductCategoryDataObject"
+            useGeneratedKeys="true" keyProperty="id">
+        insert into category(
+            type,
+            name,
+            sort,
+            status,
+            create_time,
+            update_time,
+            create_user,
+            update_user
+        ) values (
+            #{type},
+            #{name},
+            #{sort},
+            #{status},
+            #{createTime},
+            #{updateTime},
+            #{createUser},
+            #{updateUser}
+        )
+    </insert>
+
+    <update id="update" parameterType="com.shelfflow.services.admin.product.persistence.dataobject.ProductDataObject">
+        update product
+        set
+            name = #{name},
+            category_id = #{categoryId},
+            price = #{price},
+            image = #{image},
+            description = #{description},
+            status = #{status},
+            update_time = #{updateTime},
+            update_user = #{updateUser}
+        where id = #{id}
+    </update>
+
+    <update id="updateProductStatus">
+        update product
+        set status = #{status},
+            update_time = now(),
+            update_user = #{updateUser}
+        where id = #{id}
+    </update>
+
+    <update id="pauseActiveBatchesByProduct">
+        update inventory_batch
+        set status = 0,
+            update_time = now(),
+            update_user = #{updateUser}
+        where product_id = #{productId}
+          and status = 1
+    </update>
+
+    <update id="logicallyDeleteProduct">
+        update product
+        set status = #{deletedStatus},
+            name = concat('deleted-', id, '-', substring(name, 1, 14)),
+            update_time = now(),
+            update_user = #{updateUser}
+        where id = #{id}
+    </update>
+
+    <update id="disableCategory">
+        update category
+        set status = 0,
+            update_time = now(),
+            update_user = #{updateUser}
+        where id = #{id}
+          and type = 1
+    </update>
+</mapper>

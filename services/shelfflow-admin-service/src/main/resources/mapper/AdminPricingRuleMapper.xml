@@ -1,0 +1,174 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd" >
+
+<mapper namespace="com.shelfflow.services.admin.pricing.persistence.AdminPricingRulePersistenceMapper">
+
+    <select id="page" resultType="com.shelfflow.services.admin.pricing.persistence.dataobject.AdminPricingRuleDataObject">
+        select
+            id,
+            name,
+            min_days_to_expire as minDaysToExpire,
+            max_days_to_expire as maxDaysToExpire,
+            discount_rate as discountRate,
+            priority,
+            status,
+            create_time as createTime,
+            update_time as updateTime,
+            create_user as createUser,
+            update_user as updateUser
+        from pricing_rule
+        <where>
+            <if test="criteria.keyword != null">
+                and name like concat('%', #{criteria.keyword}, '%')
+            </if>
+            <if test="criteria.status != null">
+                and status = #{criteria.status}
+            </if>
+        </where>
+        order by ${criteria.sortColumn} ${criteria.sortDirection}, id desc
+        limit #{criteria.limit} offset #{criteria.offset}
+    </select>
+
+    <select id="count" resultType="long">
+        select count(1)
+        from pricing_rule
+        <where>
+            <if test="criteria.keyword != null">
+                and name like concat('%', #{criteria.keyword}, '%')
+            </if>
+            <if test="criteria.status != null">
+                and status = #{criteria.status}
+            </if>
+        </where>
+    </select>
+
+    <select id="findById" resultType="com.shelfflow.services.admin.pricing.persistence.dataobject.AdminPricingRuleDataObject">
+        select
+            id,
+            name,
+            min_days_to_expire as minDaysToExpire,
+            max_days_to_expire as maxDaysToExpire,
+            discount_rate as discountRate,
+            priority,
+            status,
+            create_time as createTime,
+            update_time as updateTime,
+            create_user as createUser,
+            update_user as updateUser
+        from pricing_rule
+        where id = #{id}
+    </select>
+
+    <select id="findIdByName" resultType="long">
+        select id
+        from pricing_rule
+        where name = #{name}
+        limit 1
+    </select>
+
+    <insert id="insert" parameterType="com.shelfflow.services.admin.pricing.persistence.dataobject.AdminPricingRuleDataObject"
+            useGeneratedKeys="true" keyProperty="id">
+        insert into pricing_rule(
+            name,
+            min_days_to_expire,
+            max_days_to_expire,
+            discount_rate,
+            priority,
+            status,
+            create_time,
+            update_time,
+            create_user,
+            update_user
+        ) values (
+            #{name},
+            #{minDaysToExpire},
+            #{maxDaysToExpire},
+            #{discountRate},
+            #{priority},
+            #{status},
+            #{createTime},
+            #{updateTime},
+            #{createUser},
+            #{updateUser}
+        )
+    </insert>
+
+    <update id="update" parameterType="com.shelfflow.services.admin.pricing.persistence.dataobject.AdminPricingRuleDataObject">
+        update pricing_rule
+        set
+            name = #{name},
+            min_days_to_expire = #{minDaysToExpire},
+            max_days_to_expire = #{maxDaysToExpire},
+            discount_rate = #{discountRate},
+            priority = #{priority},
+            status = #{status},
+            update_time = #{updateTime},
+            update_user = #{updateUser}
+        where id = #{id}
+    </update>
+
+    <update id="updateStatus">
+        update pricing_rule
+        set
+            status = #{status},
+            update_time = now(),
+            update_user = #{actorId}
+        where id = #{id}
+    </update>
+
+    <delete id="deleteById">
+        delete from pricing_rule
+        where id = #{id}
+    </delete>
+
+    <select id="listSuggestions" resultType="com.shelfflow.services.admin.pricing.persistence.dataobject.AdminPricingSuggestionRow">
+        select
+            ib.id as batchId,
+            ib.batch_code as batchCode,
+            p.id as productId,
+            p.name as productName,
+            datediff(ib.expiration_time, now()) as daysToExpire,
+            greatest(ib.stock_quantity - ib.locked_quantity - ib.sold_quantity, 0) as availableStock,
+            p.price as currentPrice
+        from inventory_batch ib
+        inner join product p on p.id = ib.product_id
+        where ib.status = 1
+          and p.status = 1
+          and ib.expiration_time >= now()
+          and datediff(ib.expiration_time, now()) &lt;= 30
+          and greatest(ib.stock_quantity - ib.locked_quantity - ib.sold_quantity, 0) > 0
+          and not exists (
+              select 1
+              from pricing_rule pr
+              where pr.name = concat(#{acceptedRuleNamePrefix}, ib.batch_code)
+          )
+        order by datediff(ib.expiration_time, now()) asc, availableStock desc, ib.id desc
+        limit #{limit}
+    </select>
+
+    <select id="listSuggestions" databaseId="h2" resultType="com.shelfflow.services.admin.pricing.persistence.dataobject.AdminPricingSuggestionRow">
+        select
+            ib.id as batchId,
+            ib.batch_code as batchCode,
+            p.id as productId,
+            p.name as productName,
+            datediff('DAY', now(), ib.expiration_time) as daysToExpire,
+            greatest(ib.stock_quantity - ib.locked_quantity - ib.sold_quantity, 0) as availableStock,
+            p.price as currentPrice
+        from inventory_batch ib
+        inner join product p on p.id = ib.product_id
+        where ib.status = 1
+          and p.status = 1
+          and ib.expiration_time >= now()
+          and datediff('DAY', now(), ib.expiration_time) &lt;= 30
+          and greatest(ib.stock_quantity - ib.locked_quantity - ib.sold_quantity, 0) > 0
+          and not exists (
+              select 1
+              from pricing_rule pr
+              where pr.name = concat(#{acceptedRuleNamePrefix}, ib.batch_code)
+          )
+        order by datediff('DAY', now(), ib.expiration_time) asc, availableStock desc, ib.id desc
+        limit #{limit}
+    </select>
+</mapper>

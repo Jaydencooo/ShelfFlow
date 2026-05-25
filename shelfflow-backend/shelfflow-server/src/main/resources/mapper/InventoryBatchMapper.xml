@@ -1,0 +1,108 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd" >
+
+<mapper namespace="com.shelfflow.mapper.InventoryBatchMapper">
+    <insert id="insert" parameterType="com.shelfflow.entity.InventoryBatch" useGeneratedKeys="true" keyProperty="id">
+        insert into inventory_batch(product_id, batch_code, production_time, expiration_time, stock_quantity, locked_quantity, sold_quantity, status, create_time, update_time, create_user, update_user)
+        values (#{productId}, #{batchCode}, #{productionTime}, #{expirationTime}, #{stockQuantity}, #{lockedQuantity}, #{soldQuantity}, #{status}, #{createTime}, #{updateTime}, #{createUser}, #{updateUser})
+    </insert>
+
+    <update id="update" parameterType="com.shelfflow.entity.InventoryBatch">
+        update inventory_batch
+        <set>
+            <if test="productId != null">product_id = #{productId},</if>
+            <if test="batchCode != null">batch_code = #{batchCode},</if>
+            <if test="productionTime != null">production_time = #{productionTime},</if>
+            <if test="expirationTime != null">expiration_time = #{expirationTime},</if>
+            <if test="stockQuantity != null">stock_quantity = #{stockQuantity},</if>
+            <if test="lockedQuantity != null">locked_quantity = #{lockedQuantity},</if>
+            <if test="soldQuantity != null">sold_quantity = #{soldQuantity},</if>
+            <if test="status != null">status = #{status},</if>
+            <if test="updateTime != null">update_time = #{updateTime},</if>
+            <if test="updateUser != null">update_user = #{updateUser},</if>
+        </set>
+        where id = #{id}
+    </update>
+
+    <select id="pageQuery" resultType="com.shelfflow.vo.InventoryBatchVO">
+        select b.*, p.name as productName, p.category_id as categoryId, p.price as basePrice
+        from inventory_batch b
+        left join product p on b.product_id = p.id
+        <where>
+            <if test="productId != null">and b.product_id = #{productId}</if>
+            <if test="categoryId != null">and p.category_id = #{categoryId}</if>
+            <if test="batchCode != null and batchCode != ''">and b.batch_code like concat('%', #{batchCode}, '%')</if>
+            <if test="status != null">and b.status = #{status}</if>
+        </where>
+        order by b.expiration_time asc, b.id desc
+    </select>
+
+    <select id="getById" resultType="com.shelfflow.vo.InventoryBatchVO">
+        select b.*, p.name as productName, p.category_id as categoryId, p.price as basePrice
+        from inventory_batch b
+        left join product p on b.product_id = p.id
+        where b.id = #{id}
+    </select>
+
+    <select id="listByProductId" resultType="com.shelfflow.vo.InventoryBatchVO">
+        select b.*, p.name as productName, p.category_id as categoryId, p.price as basePrice
+        from inventory_batch b
+        left join product p on b.product_id = p.id
+        where b.product_id = #{productId}
+        order by b.expiration_time asc, b.id desc
+    </select>
+
+    <update id="lockStock">
+        update inventory_batch
+        set locked_quantity = locked_quantity + #{quantity},
+            update_time = now()
+        where id = #{batchId}
+          and status = 1
+          and expiration_time &gt; now()
+          and stock_quantity - locked_quantity - sold_quantity &gt;= #{quantity}
+    </update>
+
+    <update id="releaseLockedStock">
+        update inventory_batch
+        set locked_quantity = locked_quantity - #{quantity},
+            update_time = now()
+        where id = #{batchId}
+          and locked_quantity &gt;= #{quantity}
+    </update>
+
+    <update id="consumeLockedStock">
+        update inventory_batch
+        set locked_quantity = locked_quantity - #{quantity},
+            sold_quantity = sold_quantity + #{quantity},
+            update_time = now()
+        where id = #{batchId}
+          and locked_quantity &gt;= #{quantity}
+    </update>
+
+    <update id="markExpiredBatches">
+        update inventory_batch
+        set status = 3,
+            update_time = now()
+        where status = 1
+          and expiration_time &lt;= now()
+    </update>
+
+    <update id="markSoldOutBatches">
+        update inventory_batch
+        set status = 2,
+            update_time = now()
+        where status = 1
+          and stock_quantity - locked_quantity - sold_quantity &lt;= 0
+          and expiration_time &gt; now()
+    </update>
+
+    <update id="restoreSaleableBatches">
+        update inventory_batch
+        set status = 1,
+            update_time = now()
+        where status = 2
+          and stock_quantity - locked_quantity - sold_quantity &gt; 0
+          and expiration_time &gt; now()
+    </update>
+</mapper>

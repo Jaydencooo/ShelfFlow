@@ -1,0 +1,299 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd" >
+
+<mapper namespace="com.shelfflow.services.user.order.persistence.UserOrderPersistenceMapper">
+
+    <select id="listCheckoutItemsByUserId" resultType="com.shelfflow.services.user.order.persistence.dataobject.UserOrderCartItemRow">
+        select
+            ci.id as cartItemId,
+            ci.product_id as productId,
+            ci.batch_id as batchId,
+            ci.name,
+            ci.image,
+            ci.product_spec as productSpec,
+            ci.number as quantity,
+            ci.amount,
+            greatest(ib.stock_quantity - ib.locked_quantity - ib.sold_quantity, 0) as availableQuantity
+        from cart_item ci
+        inner join product p on p.id = ci.product_id
+        inner join category c on c.id = p.category_id
+        inner join inventory_batch ib on ib.id = ci.batch_id
+        where ci.user_id = #{userId}
+          and p.status = 1
+          and c.status = 1
+          and c.type = 1
+          and ib.status = 1
+        order by ci.create_time asc, ci.id asc
+    </select>
+
+    <select id="listCheckoutItemsByUserId" databaseId="h2" resultType="com.shelfflow.services.user.order.persistence.dataobject.UserOrderCartItemRow">
+        select
+            ci.id as cartItemId,
+            ci.product_id as productId,
+            ci.batch_id as batchId,
+            ci.name,
+            ci.image,
+            ci.product_spec as productSpec,
+            ci.number as quantity,
+            ci.amount,
+            case
+                when (ib.stock_quantity - ib.locked_quantity - ib.sold_quantity) &lt; 0 then 0
+                else (ib.stock_quantity - ib.locked_quantity - ib.sold_quantity)
+            end as availableQuantity
+        from cart_item ci
+        inner join product p on p.id = ci.product_id
+        inner join category c on c.id = p.category_id
+        inner join inventory_batch ib on ib.id = ci.batch_id
+        where ci.user_id = #{userId}
+          and p.status = 1
+          and c.status = 1
+          and c.type = 1
+          and ib.status = 1
+        order by ci.create_time asc, ci.id asc
+    </select>
+
+    <update id="incrementBatchLockedQuantity">
+        update inventory_batch
+        set
+            locked_quantity = locked_quantity + #{quantity},
+            update_time = #{updateTime}
+        where id = #{batchId}
+          and status = 1
+          and (stock_quantity - locked_quantity - sold_quantity) &gt;= #{quantity}
+    </update>
+
+    <update id="decrementBatchLockedQuantity">
+        update inventory_batch
+        set
+            locked_quantity = locked_quantity - #{quantity},
+            update_time = #{updateTime}
+        where id = #{batchId}
+          and locked_quantity &gt;= #{quantity}
+    </update>
+
+    <insert id="insertOrder" parameterType="com.shelfflow.services.user.order.persistence.dataobject.UserOrderDataObject"
+            useGeneratedKeys="true" keyProperty="id">
+        insert into orders(
+            number,
+            status,
+            user_id,
+            pickup_contact_id,
+            order_time,
+            checkout_time,
+            pay_method,
+            pay_status,
+            amount,
+            remark,
+            phone,
+            pickup_point,
+            user_name,
+            consignee,
+            preparation_mode,
+            fulfillment_fee,
+            package_count,
+            package_strategy,
+            fulfillment_type,
+            pickup_code,
+            pickup_deadline
+        ) values (
+            #{number},
+            #{status},
+            #{userId},
+            #{pickupContactId},
+            #{orderTime},
+            #{checkoutTime},
+            #{payMethod},
+            #{payStatus},
+            #{amount},
+            #{remark},
+            #{phone},
+            #{pickupPoint},
+            #{userName},
+            #{consignee},
+            #{preparationMode},
+            #{fulfillmentFee},
+            #{packageCount},
+            #{packageStrategy},
+            #{fulfillmentType},
+            #{pickupCode},
+            #{pickupDeadline}
+        )
+    </insert>
+
+    <insert id="insertOrderDetails">
+        insert into order_detail(
+            order_id,
+            product_id,
+            batch_id,
+            name,
+            image,
+            product_spec,
+            number,
+            amount
+        ) values
+        <foreach collection="items" item="item" separator=",">
+            (
+                #{item.orderId},
+                #{item.productId},
+                #{item.batchId},
+                #{item.name},
+                #{item.image},
+                #{item.productSpec},
+                #{item.number},
+                #{item.amount}
+            )
+        </foreach>
+    </insert>
+
+    <insert id="insertOrderEvent" parameterType="com.shelfflow.services.user.order.persistence.dataobject.UserOrderEventDataObject"
+            useGeneratedKeys="true" keyProperty="id">
+        insert into order_event_log(
+            order_id,
+            event_type,
+            actor_type,
+            actor_id,
+            from_status,
+            to_status,
+            from_pay_status,
+            to_pay_status,
+            note,
+            create_time
+        ) values (
+            #{orderId},
+            #{eventType},
+            #{actorType},
+            #{actorId},
+            #{fromStatus},
+            #{toStatus},
+            #{fromPayStatus},
+            #{toPayStatus},
+            #{note},
+            #{createTime}
+        )
+    </insert>
+
+    <select id="pageOrders" resultType="com.shelfflow.services.user.order.persistence.dataobject.UserOrderSummaryRow">
+        select
+            o.id,
+            o.number,
+            o.status,
+            o.pay_status as payStatus,
+            o.amount,
+            o.remark,
+            o.pickup_code as pickupCode,
+            o.order_time as orderTime,
+            o.pickup_deadline as pickupDeadline
+        from orders o
+        where o.user_id = #{userId}
+        <if test="status != null">
+            and o.status = #{status}
+        </if>
+        order by ${sortColumn} ${sortOrder}, o.id desc
+        limit #{pageSize} offset #{offset}
+    </select>
+
+    <select id="countOrders" resultType="long">
+        select count(1)
+        from orders o
+        where o.user_id = #{userId}
+        <if test="status != null">
+            and o.status = #{status}
+        </if>
+    </select>
+
+    <select id="listOrderItemsByOrderIds" resultType="com.shelfflow.services.user.order.persistence.dataobject.UserOrderItemRow">
+        select
+            od.order_id as orderId,
+            od.product_id as productId,
+            od.batch_id as batchId,
+            od.name,
+            od.image,
+            od.product_spec as productSpec,
+            od.number,
+            od.amount
+        from order_detail od
+        where od.order_id in
+        <foreach collection="orderIds" item="orderId" open="(" separator="," close=")">
+            #{orderId}
+        </foreach>
+        order by od.order_id desc, od.id asc
+    </select>
+
+    <select id="listOrderItemsByOrderId" resultType="com.shelfflow.services.user.order.persistence.dataobject.UserOrderItemRow">
+        select
+            od.order_id as orderId,
+            od.product_id as productId,
+            od.batch_id as batchId,
+            od.name,
+            od.image,
+            od.product_spec as productSpec,
+            od.number,
+            od.amount
+        from order_detail od
+        where od.order_id = #{orderId}
+        order by od.id asc
+    </select>
+
+    <select id="listOrderEventsByOrderId" resultType="com.shelfflow.services.user.order.persistence.dataobject.UserOrderEventDataObject">
+        select
+            id,
+            order_id as orderId,
+            event_type as eventType,
+            actor_type as actorType,
+            actor_id as actorId,
+            from_status as fromStatus,
+            to_status as toStatus,
+            from_pay_status as fromPayStatus,
+            to_pay_status as toPayStatus,
+            note,
+            create_time as createTime
+        from order_event_log
+        where order_id = #{orderId}
+        order by create_time asc, id asc
+    </select>
+
+    <select id="findOrderByIdAndUserId" resultType="com.shelfflow.services.user.order.persistence.dataobject.UserOrderDetailRow">
+        select
+            o.id,
+            o.number,
+            o.status,
+            o.pay_status as payStatus,
+            o.amount,
+            o.remark,
+            o.phone,
+            o.pickup_point as pickupPoint,
+            o.consignee,
+            o.pickup_code as pickupCode,
+            o.order_time as orderTime,
+            o.checkout_time as checkoutTime,
+            o.pickup_deadline as pickupDeadline,
+            o.cancel_time as cancelTime,
+            o.cancel_reason as cancelReason
+        from orders o
+        where o.id = #{id}
+          and o.user_id = #{userId}
+        limit 1
+    </select>
+
+    <update id="cancelOrder">
+        update orders
+        set
+            status = #{status},
+            cancel_reason = #{cancelReason},
+            cancel_time = #{cancelTime}
+        where id = #{id}
+          and status in (1, 2)
+    </update>
+
+    <update id="payOrder">
+        update orders
+        set
+            status = #{status},
+            pay_status = #{payStatus},
+            checkout_time = #{checkoutTime}
+        where id = #{id}
+          and status = 1
+          and pay_status = 0
+    </update>
+</mapper>

@@ -1,0 +1,65 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd" >
+
+<mapper namespace="com.shelfflow.mapper.AiOpsMapper">
+    <select id="listSuggestions" resultType="com.shelfflow.vo.AiOpsSuggestionVO">
+        select * from (
+            select
+                'EXPIRING_SOON' as type,
+                case when datediff(b.expiration_time, now()) &lt;= 1 then 'HIGH' else 'MEDIUM' end as priority,
+                '临期批次需要加速流转' as title,
+                concat(p.name, ' 批次 ', b.batch_code, ' 距过期 ', datediff(b.expiration_time, now()), ' 天，可售库存 ', greatest(b.stock_quantity - b.locked_quantity - b.sold_quantity, 0)) as content,
+                p.id as productId,
+                p.name as productName,
+                b.id as batchId,
+                b.batch_code as batchCode,
+                datediff(b.expiration_time, now()) as daysToExpire,
+                greatest(b.stock_quantity - b.locked_quantity - b.sold_quantity, 0) as availableQuantity,
+                case when datediff(b.expiration_time, now()) &lt;= 1 then '建议立即进入清仓价并置顶展示' else '建议提高曝光并启用临期折扣' end as suggestedAction
+            from inventory_batch b
+            left join product p on b.product_id = p.id
+            where b.status = 1
+              and b.expiration_time &gt;= now()
+              and datediff(b.expiration_time, now()) &lt;= 3
+              and greatest(b.stock_quantity - b.locked_quantity - b.sold_quantity, 0) &gt; 0
+            union all
+            select
+                'SOLD_OUT' as type,
+                'LOW' as priority,
+                '批次已售罄' as title,
+                concat(p.name, ' 批次 ', b.batch_code, ' 已无可售库存') as content,
+                p.id as productId,
+                p.name as productName,
+                b.id as batchId,
+                b.batch_code as batchCode,
+                datediff(b.expiration_time, now()) as daysToExpire,
+                greatest(b.stock_quantity - b.locked_quantity - b.sold_quantity, 0) as availableQuantity,
+                '建议将批次状态调整为售罄并补充新批次' as suggestedAction
+            from inventory_batch b
+            left join product p on b.product_id = p.id
+            where b.status = 1
+              and b.stock_quantity &lt;= b.sold_quantity
+            union all
+            select
+                'OVERSTOCK' as type,
+                'MEDIUM' as priority,
+                '高库存批次需要运营干预' as title,
+                concat(p.name, ' 批次 ', b.batch_code, ' 可售库存 ', greatest(b.stock_quantity - b.locked_quantity - b.sold_quantity, 0), '，存在滞销风险') as content,
+                p.id as productId,
+                p.name as productName,
+                b.id as batchId,
+                b.batch_code as batchCode,
+                datediff(b.expiration_time, now()) as daysToExpire,
+                greatest(b.stock_quantity - b.locked_quantity - b.sold_quantity, 0) as availableQuantity,
+                '建议组合促销或下调动态定价规则' as suggestedAction
+            from inventory_batch b
+            left join product p on b.product_id = p.id
+            where b.status = 1
+              and datediff(b.expiration_time, now()) between 4 and 10
+              and greatest(b.stock_quantity - b.locked_quantity - b.sold_quantity, 0) &gt;= 50
+        ) t
+        order by field(priority, 'HIGH', 'MEDIUM', 'LOW'), daysToExpire asc, availableQuantity desc
+        limit 20
+    </select>
+</mapper>
