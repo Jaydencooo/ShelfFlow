@@ -158,6 +158,8 @@ controller -> application service -> domain policy -> persistence mapper
 
 - 用户端提交订单时锁定库存
 - 取消订单时释放锁定库存
+- 管理端按备货、待自提、自提核销推进履约状态
+- 自提核销通过自提码确认用户取货
 - 履约完成时将锁定库存结转到已售库存
 - 每次关键状态变化都会写入 `order_event_log` 审计轨迹
 
@@ -182,13 +184,34 @@ controller -> application service -> domain policy -> persistence mapper
 
 ### 5.6 AI 运营助手
 
-AI 运营助手当前采用可配置 provider 的本地规则引擎：
+AI 运营助手采用可配置 provider：
 
 - `provider=local` 时基于运营知识库和实时批次建议生成回答
+- `provider=dashscope` 时通过 OpenAI-compatible Chat Completions 协议接入阿里云百炼
 - 知识库支持分页、搜索、新增、编辑和删除
 - 实时建议复用批次库存、剩余效期、售罄和高库存规则
+- 建议执行会写入执行记录，保留执行动作、目标对象、操作摘要和结构化参数
 - `shelfflow.admin.ai-ops` 管理 provider、model、建议条数和检索条数
 - 后续替换外部大模型时保持 `/api/admin/ai-ops/chat` 契约稳定
+
+### 5.7 自提点
+
+自提点是用户端下单和管理端履约之间的线下交付节点：
+
+- 管理端维护自提点名称、地址、联系人、电话和服务时间
+- 用户端只读取启用状态的自提点
+- 用户下单时绑定自提联系人和自提点语义
+- 后续可扩展到距离排序、容量限制和门店营业状态
+
+### 5.8 用户账号
+
+用户账号围绕真实消费流程设计：
+
+- 支持手机号或邮箱注册
+- 注册、找回密码、修改手机号和邮箱需要验证码
+- 修改密码需要校验当前登录密码
+- 用户未登录可以浏览商品，购物车、订单和个人信息需要登录
+- 默认自提信息从用户账号资料派生，也允许用户自行维护
 
 ## 6. 关键状态流转
 
@@ -202,7 +225,7 @@ stateDiagram-v2
     to_prepare --> cancelled
     to_prepare --> preparing
     preparing --> ready_for_pickup
-    ready_for_pickup --> completed
+    ready_for_pickup --> completed: pickup verification
 ```
 
 ### 6.2 批次状态
@@ -237,7 +260,7 @@ stateDiagram-v2
 
 ## 8. 测试与验收
 
-当前项目已具备三层验收：
+当前项目已具备两层基础验收：
 
 ### 8.1 Java 测试
 
@@ -245,19 +268,14 @@ stateDiagram-v2
 - MVC integration test
 - H2 数据库级 integration test
 
-### 8.2 后端 smoke
+### 8.2 前端构建
 
-- `scripts/backend-smoke.sh`
-- `scripts/order-lifecycle-smoke.sh`
-- `scripts/user-backend-smoke.sh`
-
-### 8.3 前端 UI smoke
-
-- `scripts/user-web-ui-smoke.sh`
+- 管理端：`npm run build -w @shelfflow/admin-web`
+- 用户端：`npm run build -w @shelfflow/user-web`
 
 ## 9. 审计与可追踪性
 
-订单链路当前已经补齐结构化审计日志：
+订单链路已经补齐结构化审计日志：
 
 - 表：`order_event_log`
 - 记录范围：
@@ -265,6 +283,7 @@ stateDiagram-v2
   - 用户支付
   - 用户取消
   - 管理端履约状态推进
+  - 管理端自提核销
 
 每条日志记录：
 
@@ -278,6 +297,19 @@ stateDiagram-v2
 
 这样做的价值不是“多一张表”，而是把订单生命周期从黑盒操作变成可回放的业务轨迹。  
 在排查状态异常、库存争议和履约问题时，可以直接沿事件时间线回溯。
+
+管理端关键写操作也会进入操作日志：
+
+- 表：`admin_operation_log`
+- 记录范围：
+  - 商品、分类、批次、定价规则写操作
+  - 自提点维护
+  - 订单履约和自提核销
+  - AI 建议执行
+- 记录内容：
+  - 模块、操作类型、HTTP 方法、路径、状态码、操作者、摘要、创建时间
+
+这部分日志用于管理端审计和日常排查，和订单事件日志形成互补：订单事件关注业务状态，操作日志关注后台人员做了什么。
 
 ## 10. 当前架构取舍
 
@@ -307,3 +339,5 @@ stateDiagram-v2
 3. 缓存与降级策略
 4. 更细粒度权限模型
 5. 订单独立服务化评估
+6. 自提点容量和地理位置能力
+7. AI 建议执行从“辅助操作”升级为可审批工作流

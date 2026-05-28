@@ -1,6 +1,6 @@
 import { headers } from "next/headers"
 
-import { AppError, errorCodes } from "@shelfflow/shared"
+import { AppError, type ErrorCode, errorCodes } from "@shelfflow/shared"
 
 import { getServerEnv } from "@/lib/env"
 import type { ApiEnvelope } from "@/lib/types"
@@ -9,6 +9,36 @@ interface GatewayRequestOptions {
   method?: "GET" | "POST" | "PUT" | "PATCH" | "DELETE"
   body?: unknown
   accessToken?: string | null
+}
+
+type GatewayEnvelope<T> = ApiEnvelope<T> | {
+  code?: string
+  message?: string
+  data?: unknown
+  details?: unknown
+}
+
+const gatewayErrorStatusByCode: Partial<Record<ErrorCode, number>> = {
+  [errorCodes.VALIDATION_ERROR]: 400,
+  [errorCodes.UNAUTHORIZED]: 401,
+  [errorCodes.FORBIDDEN]: 403,
+  [errorCodes.NOT_FOUND]: 404,
+  [errorCodes.CONFLICT]: 409,
+  [errorCodes.RATE_LIMITED]: 429,
+  [errorCodes.INTERNAL_ERROR]: 500,
+  [errorCodes.DEPENDENCY_ERROR]: 502
+}
+
+function isErrorCode(code: unknown): code is ErrorCode {
+  return typeof code === "string" && Object.values(errorCodes).includes(code as ErrorCode)
+}
+
+function getGatewayErrorDetails(payload: GatewayEnvelope<unknown> | null) {
+  return payload && "details" in payload ? payload.details : undefined
+}
+
+function isSuccessEnvelope<T>(payload: GatewayEnvelope<T> | null): payload is ApiEnvelope<T> {
+  return Boolean(payload && payload.code === "ok" && "data" in payload)
 }
 
 function buildGatewayUrl(path: string): URL {
@@ -34,19 +64,25 @@ export async function gatewayRequest<T>(path: string, options: GatewayRequestOpt
     cache: "no-store"
   })
 
-  let payload: ApiEnvelope<T> | null = null
+  let payload: GatewayEnvelope<T> | null = null
 
   try {
-    payload = (await response.json()) as ApiEnvelope<T>
+    payload = (await response.json()) as GatewayEnvelope<T>
   } catch {
     payload = null
   }
 
-  if (!response.ok || !payload || payload.code !== "ok") {
+  if (!response.ok || !isSuccessEnvelope(payload)) {
+    const code = isErrorCode(payload?.code) ? payload.code : errorCodes.DEPENDENCY_ERROR
+    const statusCode = response.status >= 400
+      ? response.status
+      : gatewayErrorStatusByCode[code] ?? 502
+
     throw new AppError(
-      response.status === 401 ? errorCodes.UNAUTHORIZED : errorCodes.DEPENDENCY_ERROR,
-      response.status >= 400 ? response.status : 502,
-      payload?.message || "上游服务请求失败"
+      code,
+      statusCode,
+      payload?.message || "上游服务请求失败",
+      getGatewayErrorDetails(payload)
     )
   }
 

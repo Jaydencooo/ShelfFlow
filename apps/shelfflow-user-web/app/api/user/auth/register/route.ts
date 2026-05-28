@@ -15,7 +15,12 @@ export async function POST(request: Request) {
     const payload = registerSchema.parse(await request.json())
     const session = await gatewayRequest<UserSession>("/api/user/auth/register", {
       method: "POST",
-      body: payload
+      body: {
+        ...payload,
+        openId: payload.account,
+        phone: /^1\d{10}$/.test(payload.account) ? payload.account : undefined,
+        email: /^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$/.test(payload.account) ? payload.account : undefined
+      }
     })
 
     await persistSession(session)
@@ -23,8 +28,10 @@ export async function POST(request: Request) {
     const user: SessionUser = {
       userId: session.userId,
       openId: session.openId,
+      account: session.account,
       name: session.name,
-      phone: session.phone
+      phone: session.phone,
+      email: session.email
     }
 
     return NextResponse.json(buildSuccessResponse(user, requestId, "注册成功"))

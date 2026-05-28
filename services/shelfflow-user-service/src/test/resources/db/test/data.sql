@@ -27,12 +27,15 @@ INSERT INTO pricing_rule(id, min_days_to_expire, max_days_to_expire, discount_ra
 (2, 3, 7, 0.70, 20, 1),
 (3, 8, 30, 0.85, 10, 1);
 
-INSERT INTO user(id, openid, name, phone, password_hash, status, create_time, update_time) VALUES
-(4001, 'openid-seeded', 'Seed User', '13800000000', '$2a$10$Exx5A4dYk7mFjP4r.m7t1.TbIdYqj8V4aHcRUW2KIiMzFxLpy0XbW', 1, CURRENT_TIMESTAMP(), CURRENT_TIMESTAMP()),
-(4002, 'openid-recover', 'Recover User', '13800000001', '$2a$10$Exx5A4dYk7mFjP4r.m7t1.TbIdYqj8V4aHcRUW2KIiMzFxLpy0XbW', 1, CURRENT_TIMESTAMP(), CURRENT_TIMESTAMP());
+INSERT INTO user(id, openid, name, phone, email, password_hash, status, create_time, update_time) VALUES
+(4001, '13800000000', 'Seed User', '13800000000', NULL, '$2a$10$Exx5A4dYk7mFjP4r.m7t1.TbIdYqj8V4aHcRUW2KIiMzFxLpy0XbW', 1, CURRENT_TIMESTAMP(), CURRENT_TIMESTAMP()),
+(4002, 'recover@example.com', 'Recover User', NULL, 'recover@example.com', '$2a$10$Exx5A4dYk7mFjP4r.m7t1.TbIdYqj8V4aHcRUW2KIiMzFxLpy0XbW', 1, CURRENT_TIMESTAMP(), CURRENT_TIMESTAMP());
 
 INSERT INTO pickup_contact(id, user_id, consignee, phone, label, detail, is_default) VALUES
 (8001, 4001, 'Seed Contact', '13800008888', '公司', '滨江社区前置仓 A 区', 1);
+
+INSERT INTO pickup_point(id, name, address, contact_name, contact_phone, service_time, sort, status, create_time, update_time, create_user, update_user) VALUES
+(9001, '滨江社区前置仓 A 区', '滨江花园北门 12 号自提柜旁', '社区团长', '13800000001', '09:00-21:00', 10, 1, CURRENT_TIMESTAMP(), CURRENT_TIMESTAMP(), 1, 1);
 
 INSERT INTO orders(
     id, number, status, user_id, order_time, checkout_time, pay_method, pay_status, amount, remark, phone, pickup_point,

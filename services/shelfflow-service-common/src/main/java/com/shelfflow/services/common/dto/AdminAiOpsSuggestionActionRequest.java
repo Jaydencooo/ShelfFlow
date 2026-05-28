@@ -8,4 +8,8 @@ import javax.validation.constraints.NotBlank;
 public class AdminAiOpsSuggestionActionRequest {
     @NotBlank(message = "操作不能为空")
     private String action;
+
+    private String batchStatus;
+
+    private String operationNote;
 }

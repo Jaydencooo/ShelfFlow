@@ -19,8 +19,10 @@ export async function GET(request: Request) {
     const user: SessionUser = {
       userId: session.userId,
       openId: session.openId,
+      account: session.account,
       name: session.name,
-      phone: session.phone
+      phone: session.phone,
+      email: session.email
     }
 
     return NextResponse.json(buildSuccessResponse(user, requestId))
@@ -50,8 +52,10 @@ export async function PUT(request: Request) {
     const user: SessionUser = {
       userId: session.userId,
       openId: session.openId,
+      account: session.account,
       name: session.name,
-      phone: session.phone
+      phone: session.phone,
+      email: session.email
     }
 
     return NextResponse.json(buildSuccessResponse(user, requestId, "资料更新成功"))

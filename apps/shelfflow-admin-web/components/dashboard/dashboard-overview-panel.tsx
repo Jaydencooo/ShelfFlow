@@ -10,6 +10,7 @@ import {
   CheckCircle,
   Package,
   PackageCheck,
+  MapPin,
   RefreshCw,
   ShoppingCart,
   Tags,
@@ -19,6 +20,7 @@ import {
 import {
   getAdminAiOpsSuggestions,
   getAdminLossStatsOverview,
+  getAdminOperationLogs,
   getAdminOrders,
   getAdminPricingRules,
   getInventoryBatches,
@@ -31,6 +33,7 @@ import { glassCard, primaryGradient, statusGradients } from "@/lib/glass-styles"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Spinner } from "@/components/ui/spinner"
+import type { AdminOperationLog } from "@/lib/types"
 
 const quickActions = [
   {
@@ -60,6 +63,13 @@ const quickActions = [
     icon: ShoppingCart,
     href: DASHBOARD_ROUTES.orderMonitor,
     gradient: statusGradients.success,
+  },
+  {
+    title: "自提点管理",
+    description: "维护社区自提点、服务时间和用户下单可选范围",
+    icon: MapPin,
+    href: DASHBOARD_ROUTES.pickupPoints,
+    gradient: statusGradients.warning,
   },
   {
     title: "经营分析",
@@ -112,6 +122,7 @@ export function DashboardOverviewPanel() {
   const [overview, setOverview] = useState<DashboardOverviewState>(emptyOverview)
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [operationLogs, setOperationLogs] = useState<AdminOperationLog[]>([])
 
   const handleUnauthorized = useCallback(async () => {
     await logoutRequest().catch(() => undefined)
@@ -124,12 +135,13 @@ export function DashboardOverviewPanel() {
     setError(null)
 
     try {
-      const [batchResult, orderResult, pricingResult, lossOverview, aiSuggestions] = await Promise.all([
+      const [batchResult, orderResult, pricingResult, lossOverview, aiSuggestions, latestOperationLogs] = await Promise.all([
         getInventoryBatches({ page: 1, pageSize: OVERVIEW_SAMPLE_PAGE_SIZE }),
         getAdminOrders({ page: 1, pageSize: OVERVIEW_SAMPLE_PAGE_SIZE, sortBy: "orderTime", sortOrder: "desc" }),
         getAdminPricingRules({ page: 1, pageSize: OVERVIEW_SAMPLE_PAGE_SIZE, sortBy: "updatedAt", sortOrder: "desc" }),
         getAdminLossStatsOverview(),
         getAdminAiOpsSuggestions(),
+        getAdminOperationLogs(10),
       ])
 
       setOverview({
@@ -140,6 +152,7 @@ export function DashboardOverviewPanel() {
         aiSuggestionTotal: aiSuggestions.length,
         expiringSoonBatchCount: lossOverview.expiringSoonBatchCount,
       })
+      setOperationLogs(latestOperationLogs)
     } catch (loadError) {
       if (isUnauthorizedError(loadError)) {
         await handleUnauthorized()
@@ -190,8 +203,15 @@ export function DashboardOverviewPanel() {
     [overview],
   )
 
-  const activityItems = useMemo<ActivityItem[]>(
-    () => [
+  const activityItems = useMemo<ActivityItem[]>(() => {
+    if (operationLogs.length > 0) {
+      return operationLogs.map((item) => ({
+        type: item.statusCode >= 200 && item.statusCode < 400 ? "success" : "warning",
+        message: item.summary,
+        time: new Date(item.createTime).toLocaleString("zh-CN", { month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" }),
+      }))
+    }
+    return [
       {
         type: overview.orderTotal > 0 ? "success" : "warning",
         message: overview.orderTotal > 0 ? "订单监控已读取真实 Java 后端订单数据" : "当前暂无订单数据，可通过用户端下单验证履约链路",
@@ -209,9 +229,8 @@ export function DashboardOverviewPanel() {
           : "暂无定价规则或 AI 运营建议，可在定价模块补齐策略",
         time: "实时",
       },
-    ],
-    [overview],
-  )
+    ]
+  }, [operationLogs, overview])
 
   return (
     <div className="mx-auto w-full max-w-[1600px] space-y-6">

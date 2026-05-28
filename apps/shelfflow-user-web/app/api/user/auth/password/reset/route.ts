@@ -13,7 +13,11 @@ export async function POST(request: Request) {
     const payload = resetPasswordSchema.parse(await request.json())
     await gatewayRequest<null>("/api/user/auth/password/reset", {
       method: "POST",
-      body: payload
+      body: {
+        ...payload,
+        openId: payload.account,
+        phone: /^1\d{10}$/.test(payload.account) ? payload.account : undefined
+      }
     })
 
     return NextResponse.json(buildSuccessResponse(null, requestId, "密码重置成功"))

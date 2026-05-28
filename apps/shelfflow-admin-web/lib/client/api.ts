@@ -6,12 +6,16 @@ import type {
   AdminAiKnowledgeUpsert,
   AdminAiOpsChatMessage,
   AdminAiOpsChatResponse,
+  AdminAiOpsSuggestionAction,
   AdminAiOpsSuggestion,
+  AdminOperationLog,
+  AdminOperationLogQuery,
   AdminProductCategory,
   AdminProductCategoryUpsert,
   AdminLoginRequest,
   AdminLossStatsOverview,
   AdminOrderDetail,
+  AdminOrderPickupVerifyRequest,
   AdminOrderQuery,
   AdminOrderStatus,
   AdminOrderSummary,
@@ -24,6 +28,8 @@ import type {
   InventoryBatchRecord,
   InventoryBatchUpsert,
   PaginatedResult,
+  PickupPoint,
+  PickupPointUpsert,
   ProductQuery,
   ProductRecord,
   ProductUpsert,
@@ -126,6 +132,34 @@ export async function deleteAdminProductCategory(id: string) {
   return parseEnvelope<null>(response)
 }
 
+export async function getAdminPickupPoints() {
+  const response = await fetch("/api/admin/pickup-points", { cache: "no-store" })
+  return parseEnvelope<PickupPoint[]>(response)
+}
+
+export async function createAdminPickupPoint(payload: PickupPointUpsert) {
+  const response = await fetch("/api/admin/pickup-points", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(payload)
+  })
+  return parseEnvelope<PickupPoint>(response)
+}
+
+export async function updateAdminPickupPoint(id: string, payload: PickupPointUpsert) {
+  const response = await fetch(`/api/admin/pickup-points/${id}`, {
+    method: "PUT",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(payload)
+  })
+  return parseEnvelope<PickupPoint>(response)
+}
+
+export async function deleteAdminPickupPoint(id: string) {
+  const response = await fetch(`/api/admin/pickup-points/${id}`, { method: "DELETE" })
+  return parseEnvelope<null>(response)
+}
+
 export async function createProduct(payload: ProductUpsert) {
   const response = await fetch("/api/admin/products", {
     method: "POST",
@@ -149,6 +183,18 @@ export async function updateProduct(id: string, payload: ProductUpsert) {
 export async function deleteProduct(id: string) {
   const response = await fetch(`/api/admin/products/${id}`, { method: "DELETE" })
   return parseEnvelope<null>(response)
+}
+
+export async function uploadProductImage(file: File) {
+  const formData = new FormData()
+  formData.set("image", file)
+
+  const response = await fetch("/api/admin/uploads/product-image", {
+    method: "POST",
+    body: formData
+  })
+
+  return parseEnvelope<{ url: string }>(response)
 }
 
 export async function getInventoryBatches(query: InventoryBatchQuery) {
@@ -206,6 +252,16 @@ export async function updateAdminOrderStatus(id: string, orderStatus: AdminOrder
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify({ orderStatus })
+  })
+
+  return parseEnvelope<AdminOrderDetail>(response)
+}
+
+export async function verifyAdminOrderPickup(id: string, payload: AdminOrderPickupVerifyRequest) {
+  const response = await fetch(`/api/admin/orders/${id}/pickup-verification`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(payload)
   })
 
   return parseEnvelope<AdminOrderDetail>(response)
@@ -275,13 +331,28 @@ export async function getAdminAiOpsSuggestions() {
   return parseEnvelope<AdminAiOpsSuggestion[]>(response)
 }
 
-export async function updateAdminAiOpsSuggestionAction(id: string, action: "execute" | "ignore") {
+export async function updateAdminAiOpsSuggestionAction(id: string, payload: { action: "execute" | "ignore"; batchStatus?: string; operationNote?: string }) {
   const response = await fetch(`/api/admin/ai-ops/suggestions/${id}/action`, {
     method: "POST",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify({ action })
+    body: JSON.stringify(payload)
   })
   return parseEnvelope<null>(response)
+}
+
+export async function getAdminAiOpsSuggestionActions() {
+  const response = await fetch("/api/admin/ai-ops/suggestions/actions", { cache: "no-store" })
+  return parseEnvelope<AdminAiOpsSuggestionAction[]>(response)
+}
+
+export async function getAdminOperationLogs(limit = 10) {
+  const response = await fetch(`/api/admin/operation-logs?${buildQuery({ limit }).toString()}`, { cache: "no-store" })
+  return parseEnvelope<AdminOperationLog[]>(response)
+}
+
+export async function getAdminOperationLogPage(query: AdminOperationLogQuery) {
+  const response = await fetch(`/api/admin/operation-logs/page?${buildQuery(Object.entries(query)).toString()}`, { cache: "no-store" })
+  return parseEnvelope<PaginatedResult<AdminOperationLog>>(response)
 }
 
 export async function getAdminAiKnowledge(query: AdminAiKnowledgeQuery) {

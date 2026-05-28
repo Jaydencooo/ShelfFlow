@@ -146,3 +146,45 @@ CREATE TABLE ai_ops_suggestion_action (
     create_time TIMESTAMP NOT NULL,
     update_time TIMESTAMP NOT NULL
 );
+
+CREATE TABLE ai_ops_suggestion_action_log (
+    id BIGINT PRIMARY KEY AUTO_INCREMENT,
+    suggestion_id VARCHAR(96) NOT NULL,
+    action VARCHAR(24) NOT NULL,
+    status VARCHAR(16) NOT NULL,
+    target_type VARCHAR(32) NOT NULL,
+    target_id VARCHAR(64) NOT NULL,
+    target_name VARCHAR(128),
+    operation_summary VARCHAR(255) NOT NULL,
+    operation_payload CLOB,
+    actor_id BIGINT NOT NULL,
+    create_time TIMESTAMP NOT NULL
+);
+
+CREATE TABLE pickup_point (
+    id BIGINT PRIMARY KEY AUTO_INCREMENT,
+    name VARCHAR(64) NOT NULL,
+    address VARCHAR(160) NOT NULL,
+    contact_name VARCHAR(32),
+    contact_phone VARCHAR(32),
+    service_time VARCHAR(80),
+    sort INT NOT NULL,
+    status INT NOT NULL,
+    create_time TIMESTAMP,
+    update_time TIMESTAMP,
+    create_user BIGINT,
+    update_user BIGINT
+);
+
+CREATE TABLE admin_operation_log (
+    id BIGINT PRIMARY KEY AUTO_INCREMENT,
+    actor_id BIGINT,
+    module VARCHAR(32) NOT NULL,
+    action VARCHAR(32) NOT NULL,
+    method VARCHAR(8) NOT NULL,
+    path VARCHAR(255) NOT NULL,
+    status_code INT NOT NULL,
+    request_id VARCHAR(80),
+    summary VARCHAR(255) NOT NULL,
+    create_time TIMESTAMP NOT NULL
+);

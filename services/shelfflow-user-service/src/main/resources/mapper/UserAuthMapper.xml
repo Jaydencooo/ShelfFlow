@@ -10,6 +10,7 @@
             openid as openId,
             name,
             phone,
+            email,
             password_hash as passwordHash,
             status,
             create_time as createTime,
@@ -19,12 +20,63 @@
         limit 1
     </select>
 
+    <select id="findByLoginAccount" resultType="com.shelfflow.services.user.auth.persistence.dataobject.UserAccountDataObject">
+        select
+            id,
+            openid as openId,
+            name,
+            phone,
+            email,
+            password_hash as passwordHash,
+            status,
+            create_time as createTime,
+            update_time as updateTime
+        from user
+        where openid = #{account}
+           or phone = #{account}
+           or email = #{account}
+        limit 1
+    </select>
+
+    <select id="findByPhone" resultType="com.shelfflow.services.user.auth.persistence.dataobject.UserAccountDataObject">
+        select
+            id,
+            openid as openId,
+            name,
+            phone,
+            email,
+            password_hash as passwordHash,
+            status,
+            create_time as createTime,
+            update_time as updateTime
+        from user
+        where phone = #{phone}
+        limit 1
+    </select>
+
+    <select id="findByEmail" resultType="com.shelfflow.services.user.auth.persistence.dataobject.UserAccountDataObject">
+        select
+            id,
+            openid as openId,
+            name,
+            phone,
+            email,
+            password_hash as passwordHash,
+            status,
+            create_time as createTime,
+            update_time as updateTime
+        from user
+        where email = #{email}
+        limit 1
+    </select>
+
     <select id="findById" resultType="com.shelfflow.services.user.auth.persistence.dataobject.UserAccountDataObject">
         select
             id,
             openid as openId,
             name,
             phone,
+            email,
             password_hash as passwordHash,
             status,
             create_time as createTime,
@@ -39,6 +91,7 @@
             openid as openId,
             name,
             phone,
+            email,
             password_hash as passwordHash,
             status,
             create_time as createTime,
@@ -55,6 +108,7 @@
             openid,
             name,
             phone,
+            email,
             password_hash,
             status,
             create_time,
@@ -63,6 +117,7 @@
             #{openId},
             #{name},
             #{phone},
+            #{email},
             #{passwordHash},
             #{status},
             #{createTime},
@@ -75,6 +130,7 @@
         set
             name = #{name},
             phone = #{phone},
+            email = #{email},
             update_time = #{updateTime}
         where id = #{id}
     </update>

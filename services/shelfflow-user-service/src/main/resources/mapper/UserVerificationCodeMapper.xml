@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd" >
+
+<mapper namespace="com.shelfflow.services.user.auth.persistence.UserVerificationCodePersistenceMapper">
+
+    <insert id="insert" parameterType="com.shelfflow.services.user.auth.persistence.dataobject.UserVerificationCodeDataObject"
+            useGeneratedKeys="true" keyProperty="id">
+        insert into user_verification_code(
+            target,
+            purpose,
+            code_hash,
+            expires_at,
+            consumed_at,
+            create_time
+        ) values (
+            #{target},
+            #{purpose},
+            #{codeHash},
+            #{expiresAt},
+            #{consumedAt},
+            #{createTime}
+        )
+    </insert>
+
+    <select id="findLatestAvailable" resultType="com.shelfflow.services.user.auth.persistence.dataobject.UserVerificationCodeDataObject">
+        select
+            id,
+            target,
+            purpose,
+            code_hash as codeHash,
+            expires_at as expiresAt,
+            consumed_at as consumedAt,
+            create_time as createTime
+        from user_verification_code
+        where target = #{target}
+          and purpose = #{purpose}
+          and consumed_at is null
+          and expires_at &gt; #{now}
+        order by id desc
+        limit 1
+    </select>
+
+    <update id="markConsumed">
+        update user_verification_code
+        set consumed_at = #{consumedAt}
+        where id = #{id}
+          and consumed_at is null
+    </update>
+</mapper>

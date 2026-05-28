@@ -6,6 +6,7 @@ import com.shelfflow.services.common.domain.UserOrderStatus;
 import com.shelfflow.services.common.exception.ApplicationException;
 import com.shelfflow.services.user.config.UserOrderProperties;
 import com.shelfflow.services.user.order.persistence.dataobject.UserOrderCartItemRow;
+import com.shelfflow.services.user.pickuppoint.persistence.dataobject.UserPickupPointDataObject;
 import org.springframework.stereotype.Component;
 
 import java.math.BigDecimal;
@@ -22,6 +23,7 @@ public class UserOrderPolicy {
     private static final int MIN_PICKUP_CODE_LENGTH = 4;
     private static final int MAX_PICKUP_CODE_LENGTH = 12;
     private static final int MAX_CANCEL_REASON_LENGTH = 100;
+    private static final int MAX_SUBMIT_CART_ITEM_COUNT = 100;
     private static final String DEFAULT_CANCEL_REASON = "用户取消订单";
 
     private final UserOrderProperties userOrderProperties;
@@ -71,6 +73,39 @@ public class UserOrderPolicy {
             if (cartItem.getAvailableQuantity() == null || cartItem.getAvailableQuantity() < cartItem.getQuantity()) {
                 throw new ApplicationException(ErrorCode.CONFLICT, "购物车商品库存不足，请刷新后重试");
             }
+        }
+    }
+
+    public List<Long> parseOptionalCartItemIds(List<String> cartItemIds) {
+        if (cartItemIds == null) {
+            return null;
+        }
+        if (cartItemIds.isEmpty()) {
+            throw new ApplicationException(ErrorCode.VALIDATION_ERROR, "请选择要结算的商品");
+        }
+        if (cartItemIds.size() > MAX_SUBMIT_CART_ITEM_COUNT) {
+            throw new ApplicationException(ErrorCode.VALIDATION_ERROR, "单次结算商品过多，请分批提交");
+        }
+        return cartItemIds.stream()
+                .map(this::parseRequiredCartItemId)
+                .distinct()
+                .toList();
+    }
+
+    public void ensureSelectedCartItemsMatched(int expectedCount, int actualCount) {
+        if (expectedCount != actualCount) {
+            throw new ApplicationException(ErrorCode.CONFLICT, "部分购物车商品已失效，请刷新后重试");
+        }
+    }
+
+    private Long parseRequiredCartItemId(String cartItemId) {
+        if (cartItemId == null || cartItemId.isBlank()) {
+            throw new ApplicationException(ErrorCode.VALIDATION_ERROR, "购物车商品 ID 不能为空");
+        }
+        try {
+            return Long.valueOf(cartItemId.trim());
+        } catch (NumberFormatException exception) {
+            throw new ApplicationException(ErrorCode.VALIDATION_ERROR, "购物车商品 ID 必须为数字");
         }
     }
 
@@ -160,6 +195,46 @@ public class UserOrderPolicy {
 
     public LocalDateTime resolvePickupDeadline(LocalDateTime orderTime) {
         return orderTime.plusHours(userOrderProperties.getPickupDeadlineHours());
+    }
+
+    public Long parseOptionalPickupPointId(String pickupPointId) {
+        if (pickupPointId == null || pickupPointId.isBlank()) {
+            return null;
+        }
+        try {
+            return Long.valueOf(pickupPointId.trim());
+        } catch (NumberFormatException exception) {
+            throw new ApplicationException(ErrorCode.VALIDATION_ERROR, "pickupPointId 必须为数字");
+        }
+    }
+
+    public void ensurePickupPointExists(boolean exists) {
+        if (!exists) {
+            throw new ApplicationException(ErrorCode.NOT_FOUND, "自提点不存在或已停用");
+        }
+    }
+
+    public void ensurePickupConsigneePresent(String consignee) {
+        if (consignee == null || consignee.isBlank()) {
+            throw new ApplicationException(ErrorCode.VALIDATION_ERROR, "自提人不能为空，请先完善自提信息");
+        }
+    }
+
+    public void ensurePickupPhonePresent(String phone) {
+        if (phone == null || phone.isBlank()) {
+            throw new ApplicationException(ErrorCode.VALIDATION_ERROR, "自提联系电话不能为空，请先完善自提信息");
+        }
+    }
+
+    public String resolvePickupPoint(UserPickupPointDataObject pickupPoint) {
+        if (pickupPoint != null) {
+            return pickupPoint.getName() + "｜" + pickupPoint.getAddress();
+        }
+        String pickupPointName = userOrderProperties.getPickupPoint();
+        if (pickupPointName == null || pickupPointName.isBlank()) {
+            throw new ApplicationException(ErrorCode.INTERNAL_ERROR, "默认自提点未配置");
+        }
+        return pickupPointName.trim();
     }
 
     public String resolvePickupPoint() {

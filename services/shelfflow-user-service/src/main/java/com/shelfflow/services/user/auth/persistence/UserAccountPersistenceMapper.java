@@ -9,6 +9,12 @@ public interface UserAccountPersistenceMapper {
 
     UserAccountDataObject findByOpenId(@Param("openId") String openId);
 
+    UserAccountDataObject findByLoginAccount(@Param("account") String account);
+
+    UserAccountDataObject findByPhone(@Param("phone") String phone);
+
+    UserAccountDataObject findByEmail(@Param("email") String email);
+
     UserAccountDataObject findById(@Param("id") Long id);
 
     UserAccountDataObject findByOpenIdAndPhone(@Param("openId") String openId, @Param("phone") String phone);

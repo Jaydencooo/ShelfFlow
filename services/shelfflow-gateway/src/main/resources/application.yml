@@ -27,6 +27,10 @@ spring:
           uri: ${SHELFFLOW_ADMIN_SERVICE_BASE_URL:${ADMIN_SERVICE_BASE_URL:http://127.0.0.1:4012}}
           predicates:
             - Path=/api/admin/orders/**
+        - id: admin-service-pickup-points
+          uri: ${SHELFFLOW_ADMIN_SERVICE_BASE_URL:${ADMIN_SERVICE_BASE_URL:http://127.0.0.1:4012}}
+          predicates:
+            - Path=/api/admin/pickup-points/**
         - id: admin-service-pricing-rules
           uri: ${SHELFFLOW_ADMIN_SERVICE_BASE_URL:${ADMIN_SERVICE_BASE_URL:http://127.0.0.1:4012}}
           predicates:
@@ -39,6 +43,10 @@ spring:
           uri: ${SHELFFLOW_ADMIN_SERVICE_BASE_URL:${ADMIN_SERVICE_BASE_URL:http://127.0.0.1:4012}}
           predicates:
             - Path=/api/admin/ai-ops/**
+        - id: admin-service-operation-logs
+          uri: ${SHELFFLOW_ADMIN_SERVICE_BASE_URL:${ADMIN_SERVICE_BASE_URL:http://127.0.0.1:4012}}
+          predicates:
+            - Path=/api/admin/operation-logs/**
         - id: user-service
           uri: ${SHELFFLOW_USER_SERVICE_BASE_URL:${USER_SERVICE_BASE_URL:http://127.0.0.1:4013}}
           predicates:

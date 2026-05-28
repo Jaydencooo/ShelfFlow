@@ -42,7 +42,7 @@ shelfflow
 
 1. 安装 JDK 17、Maven、MySQL 和 Redis。
 2. 在 MySQL 中执行 `mysql.sql` 初始化 `shelfflow` 数据库。
-3. 复制 `shelfflow-server/src/main/resources/application-dev.yml.template` 为 `application-dev.yml`，填写数据库、Redis、JWT、对象存储和微信小程序配置；本地端口统一由 `scripts/shelfflow-env.sh` 或环境变量控制。
+3. 复制 `shelfflow-server/src/main/resources/application-dev.yml.template` 为 `application-dev.yml`，填写数据库、Redis、JWT、对象存储和微信小程序配置；本地端口以根目录 `.env.local` 和 IDEA 运行配置为准。
 4. 编译项目：
 
 ```bash

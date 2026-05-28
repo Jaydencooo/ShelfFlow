@@ -12,6 +12,7 @@ import com.shelfflow.services.admin.aiops.persistence.dataobject.AdminAiKnowledg
 import com.shelfflow.services.admin.aiops.persistence.dataobject.AdminAiOpsChatMessageDataObject;
 import com.shelfflow.services.admin.aiops.persistence.dataobject.AdminAiOpsChatSessionDataObject;
 import com.shelfflow.services.admin.aiops.persistence.dataobject.AdminAiOpsSuggestionActionDataObject;
+import com.shelfflow.services.admin.aiops.persistence.dataobject.AdminAiOpsSuggestionActionLogDataObject;
 import com.shelfflow.services.admin.aiops.persistence.dataobject.AdminAiOpsSuggestionRow;
 import com.shelfflow.services.admin.inventorybatch.persistence.InventoryBatchPersistenceMapper;
 import com.shelfflow.services.common.api.ErrorCode;
@@ -22,6 +23,8 @@ import com.shelfflow.services.common.dto.AdminAiKnowledgeResponse;
 import com.shelfflow.services.common.dto.AdminAiKnowledgeUpsertRequest;
 import com.shelfflow.services.common.dto.AdminAiOpsChatMessageResponse;
 import com.shelfflow.services.common.dto.AdminAiOpsChatResponse;
+import com.shelfflow.services.common.dto.AdminAiOpsSuggestionActionResponse;
+import com.shelfflow.services.common.dto.AdminAiOpsSuggestionExecutionPlanResponse;
 import com.shelfflow.services.common.dto.AdminAiOpsSuggestionResponse;
 import com.shelfflow.services.common.exception.ApplicationException;
 import org.springframework.stereotype.Service;
@@ -29,6 +32,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Map;
 
 @Service
 public class AdminAiOpsApplicationService {
@@ -48,6 +52,9 @@ public class AdminAiOpsApplicationService {
     private static final String SUGGESTION_TYPE_EXPIRED = "EXPIRED";
     private static final String SUGGESTION_TYPE_EXPIRING_SOON = "EXPIRING_SOON";
     private static final String SUGGESTION_TYPE_SOLD_OUT = "SOLD_OUT";
+    private static final String SUGGESTION_TYPE_OVERSTOCK = "OVERSTOCK";
+    private static final String TARGET_TYPE_BATCH = "inventory_batch";
+    private static final int ACTION_HISTORY_LIMIT = 30;
 
     private final AdminAiOpsPersistenceMapper aiOpsPersistenceMapper;
     private final InventoryBatchPersistenceMapper inventoryBatchPersistenceMapper;
@@ -142,6 +149,13 @@ public class AdminAiOpsApplicationService {
     }
 
     @Transactional(readOnly = true)
+    public List<AdminAiOpsSuggestionActionResponse> suggestionActions() {
+        return aiOpsPersistenceMapper.listSuggestionActionLogs(ACTION_HISTORY_LIMIT).stream()
+                .map(this::toSuggestionActionResponse)
+                .toList();
+    }
+
+    @Transactional(readOnly = true)
     public List<AdminAiOpsChatMessageResponse> chatHistory(Long actorId, String sessionId) {
         AdminAiOpsChatSessionDataObject session = resolveSession(actorId, sessionId, false);
         if (session == null) {
@@ -188,29 +202,39 @@ public class AdminAiOpsApplicationService {
     }
 
     @Transactional
-    public void updateSuggestionAction(Long actorId, String suggestionId, String action) {
+    public void updateSuggestionAction(Long actorId, String suggestionId, String action, String batchStatus, String operationNote) {
         String normalizedAction = blankToNull(action);
         if (!SUGGESTION_ACTION_EXECUTE.equals(normalizedAction) && !SUGGESTION_ACTION_IGNORE.equals(normalizedAction)) {
             throw new ApplicationException(ErrorCode.VALIDATION_ERROR, "建议操作不支持");
         }
 
+        AdminAiOpsSuggestionRow suggestion = findPendingSuggestion(suggestionId);
+        AdminAiOpsSuggestionExecutionPlanResponse executionPlan = buildExecutionPlan(suggestion);
+        String finalStatus = SUGGESTION_ACTION_EXECUTE.equals(normalizedAction) ? SUGGESTION_STATUS_EXECUTED : SUGGESTION_STATUS_IGNORED;
+        String summary = SUGGESTION_ACTION_EXECUTE.equals(normalizedAction)
+                ? executeSuggestion(actorId, suggestion, batchStatus, operationNote)
+                : "已忽略建议：" + suggestion.getTitle();
+        saveSuggestionActionLog(actorId, suggestionId, normalizedAction, finalStatus, suggestion, summary, batchStatus, operationNote, executionPlan);
         if (SUGGESTION_ACTION_EXECUTE.equals(normalizedAction)) {
-            executeSuggestion(actorId, suggestionId);
-        }
-        saveSuggestionAction(actorId, suggestionId, SUGGESTION_ACTION_EXECUTE.equals(normalizedAction) ? SUGGESTION_STATUS_EXECUTED : SUGGESTION_STATUS_IGNORED);
-    }
-
-    private void executeSuggestion(Long actorId, String suggestionId) {
-        String[] parts = parseSuggestionId(suggestionId);
-        Long batchId = parseRequiredLong(parts[1], "batchId");
-        String type = parts[0];
-        if (SUGGESTION_TYPE_EXPIRED.equals(type) || SUGGESTION_TYPE_EXPIRING_SOON.equals(type)) {
-            inventoryBatchPersistenceMapper.updateStatus(batchId, BatchStatus.PAUSED.legacyValue(), actorId, LocalDateTime.now());
+            saveSuggestionAction(actorId, suggestionId, SUGGESTION_STATUS_EXECUTED);
             return;
         }
-        if (SUGGESTION_TYPE_SOLD_OUT.equals(type)) {
-            inventoryBatchPersistenceMapper.updateStatus(batchId, BatchStatus.SOLD_OUT.legacyValue(), actorId, LocalDateTime.now());
+        saveSuggestionAction(actorId, suggestionId, SUGGESTION_STATUS_IGNORED);
+    }
+
+    private String executeSuggestion(Long actorId, AdminAiOpsSuggestionRow suggestion, String requestedBatchStatus, String operationNote) {
+        Long batchId = suggestion.getBatchId();
+        String type = suggestion.getType();
+        BatchStatus targetStatus = resolveTargetBatchStatus(type, requestedBatchStatus);
+        if (SUGGESTION_TYPE_EXPIRED.equals(type) || SUGGESTION_TYPE_EXPIRING_SOON.equals(type)) {
+            inventoryBatchPersistenceMapper.updateStatus(batchId, targetStatus.legacyValue(), actorId, LocalDateTime.now());
+            return suggestion.getBatchCode() + " 已调整为" + targetStatus.value() + buildOptionalNote(operationNote);
         }
+        if (SUGGESTION_TYPE_SOLD_OUT.equals(type)) {
+            inventoryBatchPersistenceMapper.updateStatus(batchId, targetStatus.legacyValue(), actorId, LocalDateTime.now());
+            return suggestion.getBatchCode() + " 已调整为" + targetStatus.value() + buildOptionalNote(operationNote);
+        }
+        return suggestion.getBatchCode() + " 已记录运营处置：" + suggestion.getSuggestedAction() + buildOptionalNote(operationNote);
     }
 
     private AdminAiKnowledgeResponse toKnowledgeResponse(AdminAiKnowledgeDataObject knowledge) {
@@ -239,7 +263,84 @@ public class AdminAiOpsApplicationService {
                 .availableQuantity(row.getAvailableQuantity())
                 .suggestedAction(row.getSuggestedAction())
                 .status(SUGGESTION_STATUS_PENDING)
+                .executionPlan(buildExecutionPlan(row))
                 .build();
+    }
+
+    private AdminAiOpsSuggestionActionResponse toSuggestionActionResponse(AdminAiOpsSuggestionActionLogDataObject row) {
+        return AdminAiOpsSuggestionActionResponse.builder()
+                .id(String.valueOf(row.getId()))
+                .suggestionId(row.getSuggestionId())
+                .action(row.getAction())
+                .status(row.getStatus())
+                .targetType(row.getTargetType())
+                .targetId(row.getTargetId())
+                .targetName(row.getTargetName())
+                .operationSummary(row.getOperationSummary())
+                .operationPayload(row.getOperationPayload())
+                .actorId(row.getActorId())
+                .createTime(row.getCreateTime())
+                .build();
+    }
+
+    private AdminAiOpsSuggestionExecutionPlanResponse buildExecutionPlan(AdminAiOpsSuggestionRow row) {
+        BatchStatus defaultStatus = resolveDefaultBatchStatus(row.getType());
+        String editableFields = SUGGESTION_TYPE_OVERSTOCK.equals(row.getType()) ? "operationNote" : "batchStatus,operationNote";
+        return AdminAiOpsSuggestionExecutionPlanResponse.builder()
+                .targetType(TARGET_TYPE_BATCH)
+                .targetId(String.valueOf(row.getBatchId()))
+                .targetName(row.getBatchCode())
+                .operationType(SUGGESTION_TYPE_OVERSTOCK.equals(row.getType()) ? "record_operation" : "update_batch_status")
+                .defaultBatchStatus(defaultStatus.value())
+                .summary(buildExecutionSummary(row, defaultStatus))
+                .editableFields(editableFields)
+                .build();
+    }
+
+    private String buildExecutionSummary(AdminAiOpsSuggestionRow row, BatchStatus defaultStatus) {
+        if (SUGGESTION_TYPE_OVERSTOCK.equals(row.getType())) {
+            return "记录高库存运营处置，建议结合定价规则或组合促销处理。";
+        }
+        return "将批次 " + row.getBatchCode() + " 状态调整为 " + defaultStatus.value() + "。";
+    }
+
+    private BatchStatus resolveDefaultBatchStatus(String suggestionType) {
+        if (SUGGESTION_TYPE_SOLD_OUT.equals(suggestionType)) {
+            return BatchStatus.SOLD_OUT;
+        }
+        if (SUGGESTION_TYPE_EXPIRED.equals(suggestionType) || SUGGESTION_TYPE_EXPIRING_SOON.equals(suggestionType)) {
+            return BatchStatus.PAUSED;
+        }
+        return BatchStatus.ACTIVE;
+    }
+
+    private BatchStatus resolveTargetBatchStatus(String suggestionType, String requestedBatchStatus) {
+        if (SUGGESTION_TYPE_OVERSTOCK.equals(suggestionType)) {
+            return BatchStatus.ACTIVE;
+        }
+        String normalized = blankToNull(requestedBatchStatus);
+        if (normalized == null) {
+            return resolveDefaultBatchStatus(suggestionType);
+        }
+        try {
+            BatchStatus status = BatchStatus.fromValue(normalized);
+            if (BatchStatus.DRAFT.equals(status)) {
+                throw new ApplicationException(ErrorCode.VALIDATION_ERROR, "执行建议不支持调整为草稿状态");
+            }
+            return status;
+        } catch (IllegalArgumentException exception) {
+            throw new ApplicationException(ErrorCode.VALIDATION_ERROR, "批次状态不支持");
+        }
+    }
+
+    private AdminAiOpsSuggestionRow findPendingSuggestion(String suggestionId) {
+        String[] parts = parseSuggestionId(suggestionId);
+        Long batchId = parseRequiredLong(parts[1], "batchId");
+        String type = parts[0];
+        return aiOpsPersistenceMapper.listSuggestions(properties.getSuggestionLimit()).stream()
+                .filter(row -> type.equals(row.getType()) && batchId.equals(row.getBatchId()))
+                .findFirst()
+                .orElseThrow(() -> new ApplicationException(ErrorCode.NOT_FOUND, "运营建议不存在或已处理"));
     }
 
     private AdminAiOpsChatSessionDataObject resolveSession(Long actorId, String sessionId, boolean createIfMissing) {
@@ -295,6 +396,46 @@ public class AdminAiOpsApplicationService {
         action.setCreateTime(now);
         action.setUpdateTime(now);
         aiOpsPersistenceMapper.upsertSuggestionAction(action);
+    }
+
+    private void saveSuggestionActionLog(Long actorId,
+                                         String suggestionId,
+                                         String action,
+                                         String status,
+                                         AdminAiOpsSuggestionRow suggestion,
+                                         String operationSummary,
+                                         String batchStatus,
+                                         String operationNote,
+                                         AdminAiOpsSuggestionExecutionPlanResponse executionPlan) {
+        AdminAiOpsSuggestionActionLogDataObject actionLog = new AdminAiOpsSuggestionActionLogDataObject();
+        actionLog.setSuggestionId(suggestionId);
+        actionLog.setAction(action);
+        actionLog.setStatus(status);
+        actionLog.setTargetType(TARGET_TYPE_BATCH);
+        actionLog.setTargetId(String.valueOf(suggestion.getBatchId()));
+        actionLog.setTargetName(suggestion.getBatchCode());
+        actionLog.setOperationSummary(operationSummary);
+        actionLog.setOperationPayload(writePayload(Map.of(
+                "batchStatus", blankToNull(batchStatus) == null ? executionPlan.getDefaultBatchStatus() : batchStatus,
+                "operationNote", blankToNull(operationNote) == null ? "" : operationNote,
+                "executionPlan", executionPlan.getSummary()
+        )));
+        actionLog.setActorId(actorId);
+        actionLog.setCreateTime(LocalDateTime.now());
+        aiOpsPersistenceMapper.insertSuggestionActionLog(actionLog);
+    }
+
+    private String writePayload(Map<String, String> payload) {
+        try {
+            return objectMapper.writeValueAsString(payload);
+        } catch (JsonProcessingException exception) {
+            return "{}";
+        }
+    }
+
+    private String buildOptionalNote(String operationNote) {
+        String normalized = blankToNull(operationNote);
+        return normalized == null ? "" : "，备注：" + normalized;
     }
 
     private String[] parseSuggestionId(String suggestionId) {

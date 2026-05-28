@@ -32,6 +32,7 @@ CREATE TABLE user (
     openid VARCHAR(64),
     name VARCHAR(32),
     phone VARCHAR(11),
+    email VARCHAR(100),
     password_hash VARCHAR(100),
     status INT NOT NULL DEFAULT 1,
     create_time TIMESTAMP,
@@ -39,7 +40,20 @@ CREATE TABLE user (
 );
 
 CREATE UNIQUE INDEX uq_user_openid ON user(openid);
-CREATE INDEX idx_user_phone ON user(phone);
+CREATE UNIQUE INDEX uq_user_phone ON user(phone);
+CREATE UNIQUE INDEX uq_user_email ON user(email);
+
+CREATE TABLE user_verification_code (
+    id BIGINT PRIMARY KEY AUTO_INCREMENT,
+    target VARCHAR(100) NOT NULL,
+    purpose VARCHAR(32) NOT NULL,
+    code_hash VARCHAR(100) NOT NULL,
+    expires_at TIMESTAMP NOT NULL,
+    consumed_at TIMESTAMP,
+    create_time TIMESTAMP NOT NULL
+);
+
+CREATE INDEX idx_user_verification_code_target ON user_verification_code(target, purpose, expires_at);
 
 CREATE TABLE pickup_contact (
     id BIGINT PRIMARY KEY AUTO_INCREMENT,
@@ -52,6 +66,21 @@ CREATE TABLE pickup_contact (
 );
 
 CREATE INDEX idx_pickup_contact_user_default ON pickup_contact(user_id, is_default);
+
+CREATE TABLE pickup_point (
+    id BIGINT PRIMARY KEY AUTO_INCREMENT,
+    name VARCHAR(64) NOT NULL,
+    address VARCHAR(160) NOT NULL,
+    contact_name VARCHAR(32),
+    contact_phone VARCHAR(32),
+    service_time VARCHAR(80),
+    sort INT NOT NULL,
+    status INT NOT NULL,
+    create_time TIMESTAMP,
+    update_time TIMESTAMP,
+    create_user BIGINT,
+    update_user BIGINT
+);
 
 CREATE TABLE inventory_batch (
     id BIGINT PRIMARY KEY AUTO_INCREMENT,

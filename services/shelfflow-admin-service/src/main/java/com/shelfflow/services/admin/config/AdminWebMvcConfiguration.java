@@ -4,6 +4,8 @@ import com.shelfflow.services.common.security.AdminAccessTokenParser;
 import com.shelfflow.services.common.security.AdminAuthorizationProfile;
 import com.shelfflow.services.common.security.AdminAuthenticatedUserArgumentResolver;
 import com.shelfflow.services.common.security.AdminAuthenticationInterceptor;
+import com.shelfflow.services.admin.operationlog.service.AdminOperationLogApplicationService;
+import com.shelfflow.services.admin.operationlog.web.AdminOperationLogInterceptor;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.web.method.support.HandlerMethodArgumentResolver;
 import org.springframework.web.servlet.config.annotation.InterceptorRegistry;
@@ -19,16 +21,22 @@ public class AdminWebMvcConfiguration implements WebMvcConfigurer {
 
     private final AdminAccessTokenParser adminAccessTokenParser;
     private final AdminAuthorizationProfile adminAuthorizationProfile;
+    private final AdminOperationLogApplicationService operationLogApplicationService;
 
     public AdminWebMvcConfiguration(AdminAccessTokenParser adminAccessTokenParser,
-                                   AdminAuthorizationProfile adminAuthorizationProfile) {
+                                   AdminAuthorizationProfile adminAuthorizationProfile,
+                                   AdminOperationLogApplicationService operationLogApplicationService) {
         this.adminAccessTokenParser = adminAccessTokenParser;
         this.adminAuthorizationProfile = adminAuthorizationProfile;
+        this.operationLogApplicationService = operationLogApplicationService;
     }
 
     @Override
     public void addInterceptors(InterceptorRegistry registry) {
         registry.addInterceptor(new AdminAuthenticationInterceptor(adminAccessTokenParser))
+                .addPathPatterns(ADMIN_API_PATH_PATTERN)
+                .excludePathPatterns(ADMIN_AUTH_API_PATH_PATTERN);
+        registry.addInterceptor(new AdminOperationLogInterceptor(operationLogApplicationService))
                 .addPathPatterns(ADMIN_API_PATH_PATTERN)
                 .excludePathPatterns(ADMIN_AUTH_API_PATH_PATTERN);
     }

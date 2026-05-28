@@ -21,7 +21,8 @@ public class AdminAuthorizationProfile {
             AdminPermission.AI_OPS_READ,
             AdminPermission.AI_OPS_WRITE,
             AdminPermission.ORDER_READ,
-            AdminPermission.ORDER_WRITE
+            AdminPermission.ORDER_WRITE,
+            AdminPermission.OPERATION_LOG_READ
     );
 
     public Set<AdminRole> defaultRoles() {

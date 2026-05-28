@@ -1,0 +1,62 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd" >
+
+<mapper namespace="com.shelfflow.services.admin.pickuppoint.persistence.AdminPickupPointPersistenceMapper">
+
+    <select id="listAll" resultType="com.shelfflow.services.admin.pickuppoint.persistence.dataobject.AdminPickupPointDataObject">
+        select id, name, address, contact_name as contactName, contact_phone as contactPhone,
+               service_time as serviceTime, sort, status, create_time as createTime,
+               update_time as updateTime, create_user as createUser, update_user as updateUser
+        from pickup_point
+        order by sort asc, id asc
+    </select>
+
+    <select id="findById" resultType="com.shelfflow.services.admin.pickuppoint.persistence.dataobject.AdminPickupPointDataObject">
+        select id, name, address, contact_name as contactName, contact_phone as contactPhone,
+               service_time as serviceTime, sort, status, create_time as createTime,
+               update_time as updateTime, create_user as createUser, update_user as updateUser
+        from pickup_point
+        where id = #{id}
+    </select>
+
+    <select id="findIdByName" resultType="long">
+        select id
+        from pickup_point
+        where name = #{name}
+        limit 1
+    </select>
+
+    <select id="findMaxSort" resultType="int">
+        select max(sort) from pickup_point
+    </select>
+
+    <insert id="insert" parameterType="com.shelfflow.services.admin.pickuppoint.persistence.dataobject.AdminPickupPointDataObject"
+            useGeneratedKeys="true" keyProperty="id">
+        insert into pickup_point(name, address, contact_name, contact_phone, service_time, sort, status, create_time, update_time, create_user, update_user)
+        values(#{name}, #{address}, #{contactName}, #{contactPhone}, #{serviceTime}, #{sort}, #{status}, #{createTime}, #{updateTime}, #{createUser}, #{updateUser})
+    </insert>
+
+    <update id="update" parameterType="com.shelfflow.services.admin.pickuppoint.persistence.dataobject.AdminPickupPointDataObject">
+        update pickup_point
+        set name = #{name},
+            address = #{address},
+            contact_name = #{contactName},
+            contact_phone = #{contactPhone},
+            service_time = #{serviceTime},
+            sort = #{sort},
+            status = #{status},
+            update_time = #{updateTime},
+            update_user = #{updateUser}
+        where id = #{id}
+    </update>
+
+    <update id="disable">
+        update pickup_point
+        set status = 0,
+            update_user = #{actorId},
+            update_time = now()
+        where id = #{id}
+          and status = 1
+    </update>
+</mapper>

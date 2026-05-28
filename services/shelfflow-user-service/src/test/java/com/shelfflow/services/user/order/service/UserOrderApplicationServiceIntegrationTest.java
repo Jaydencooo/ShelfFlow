@@ -2,6 +2,7 @@ package com.shelfflow.services.user.order.service;
 
 import com.shelfflow.services.common.api.PageResponse;
 import com.shelfflow.services.common.dto.UserCartItemAddRequest;
+import com.shelfflow.services.common.dto.UserCartItemResponse;
 import com.shelfflow.services.common.dto.UserOrderCancelRequest;
 import com.shelfflow.services.common.dto.UserOrderQuery;
 import com.shelfflow.services.common.dto.UserOrderDetailResponse;
@@ -21,6 +22,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -33,6 +35,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 class UserOrderApplicationServiceIntegrationTest {
 
     private static final UserAuthenticatedUser USER = new UserAuthenticatedUser(4001L, "openid-seeded", "token");
+    private static final UserAuthenticatedUser EMAIL_ONLY_USER = new UserAuthenticatedUser(4002L, "recover@example.com", "token");
 
     @Autowired
     private UserOrderApplicationService userOrderApplicationService;
@@ -90,10 +93,49 @@ class UserOrderApplicationServiceIntegrationTest {
     }
 
     @Test
+    void submitShouldOnlyUseSelectedCartItems() {
+        UserCartItemAddRequest milkRequest = new UserCartItemAddRequest();
+        milkRequest.setProductId("1001");
+        milkRequest.setQuantity(1);
+        userCartApplicationService.addItem(USER, milkRequest);
+
+        UserCartItemAddRequest breadRequest = new UserCartItemAddRequest();
+        breadRequest.setProductId("1002");
+        breadRequest.setQuantity(1);
+        userCartApplicationService.addItem(USER, breadRequest);
+
+        List<UserCartItemResponse> cartItems = userCartApplicationService.listItems(USER);
+        UserCartItemResponse selected = cartItems.stream()
+                .filter(item -> "1001".equals(item.getProductId()))
+                .findFirst()
+                .orElseThrow();
+        UserOrderSubmitRequest submitRequest = new UserOrderSubmitRequest();
+        submitRequest.setCartItemIds(List.of(selected.getId()));
+
+        UserOrderSubmitResponse response = userOrderApplicationService.submit(USER, submitRequest);
+
+        assertEquals(1, response.getItemCount());
+        assertEquals(new BigDecimal("8.75"), response.getTotalAmount());
+        List<UserCartItemResponse> remainingItems = userCartApplicationService.listItems(USER);
+        assertEquals(1, remainingItems.size());
+        assertEquals("1002", remainingItems.get(0).getProductId());
+    }
+
+    @Test
     void submitShouldRejectWhenCartEmpty() {
         UserOrderSubmitRequest request = new UserOrderSubmitRequest();
 
         assertThrows(ApplicationException.class, () -> userOrderApplicationService.submit(USER, request));
+    }
+
+    @Test
+    void submitShouldRejectWhenPickupPhoneMissing() {
+        UserCartItemAddRequest request = new UserCartItemAddRequest();
+        request.setProductId("1001");
+        request.setQuantity(1);
+        userCartApplicationService.addItem(EMAIL_ONLY_USER, request);
+
+        assertThrows(ApplicationException.class, () -> userOrderApplicationService.submit(EMAIL_ONLY_USER, new UserOrderSubmitRequest()));
     }
 
     @Test

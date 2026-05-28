@@ -15,6 +15,8 @@ import com.shelfflow.services.common.dto.UserOrderDetailResponse;
 import com.shelfflow.services.common.dto.UserOrderSummaryResponse;
 import com.shelfflow.services.common.dto.UserRegisterRequest;
 import com.shelfflow.services.common.dto.UserSessionResponse;
+import com.shelfflow.services.common.dto.UserVerificationCodeRequest;
+import com.shelfflow.services.common.dto.UserVerificationCodeResponse;
 import com.shelfflow.services.common.security.UserAccessTokenService;
 import com.shelfflow.services.common.security.UserAuthenticatedUser;
 import com.shelfflow.services.common.security.UserAuthenticatedUserArgumentResolver;
@@ -22,6 +24,7 @@ import com.shelfflow.services.common.security.UserAuthenticationInterceptor;
 import com.shelfflow.services.common.web.GlobalExceptionHandler;
 import com.shelfflow.services.user.order.service.UserOrderApplicationService;
 import com.shelfflow.services.user.auth.service.UserSessionApplicationService;
+import com.shelfflow.services.user.auth.service.UserVerificationCodeApplicationService;
 import com.shelfflow.services.user.cart.service.UserCartApplicationService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -63,6 +66,9 @@ class UserControllerAuthenticationIntegrationTest {
     private UserSessionApplicationService userSessionApplicationService;
 
     @Mock
+    private UserVerificationCodeApplicationService userVerificationCodeApplicationService;
+
+    @Mock
     private UserCartApplicationService userCartApplicationService;
 
     @Mock
@@ -80,7 +86,7 @@ class UserControllerAuthenticationIntegrationTest {
         jwtProperties.setExpiresIn("PT12H");
         userAccessTokenService = new UserAccessTokenService(objectMapper, jwtProperties);
 
-        UserAuthController userAuthController = new UserAuthController(userSessionApplicationService);
+        UserAuthController userAuthController = new UserAuthController(userSessionApplicationService, userVerificationCodeApplicationService);
         UserCartController userCartController = new UserCartController(userCartApplicationService);
         UserOrderController userOrderController = new UserOrderController(userOrderApplicationService);
 
@@ -98,13 +104,14 @@ class UserControllerAuthenticationIntegrationTest {
     @Test
     void loginShouldNotRequireAuthorization() throws Exception {
         UserLoginRequest request = new UserLoginRequest();
-        request.setOpenId(OPEN_ID);
+        request.setAccount("13900000000");
         request.setPassword("Passw0rd!");
 
         when(userSessionApplicationService.login(any(UserLoginRequest.class))).thenReturn(
                 UserSessionResponse.builder()
                         .userId(String.valueOf(USER_ID))
-                        .openId(OPEN_ID)
+                        .openId("13900000000")
+                        .account("13900000000")
                         .name("Test User")
                         .phone("13900000000")
                         .token("token")
@@ -118,7 +125,7 @@ class UserControllerAuthenticationIntegrationTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value("ok"))
                 .andExpect(jsonPath("$.requestId").value(REQUEST_ID))
-                .andExpect(jsonPath("$.data.openId").value(OPEN_ID));
+                .andExpect(jsonPath("$.data.account").value("13900000000"));
 
         verify(userSessionApplicationService).login(any(UserLoginRequest.class));
     }
@@ -126,17 +133,19 @@ class UserControllerAuthenticationIntegrationTest {
     @Test
     void registerShouldNotRequireAuthorization() throws Exception {
         UserRegisterRequest request = new UserRegisterRequest();
-        request.setOpenId("new-user-1001");
+        request.setAccount("new-user@example.com");
         request.setName("New User");
-        request.setPhone("13900000000");
         request.setPassword("Passw0rd!");
+        request.setConfirmPassword("Passw0rd!");
+        request.setVerificationCode("123456");
 
         when(userSessionApplicationService.register(any(UserRegisterRequest.class))).thenReturn(
                 UserSessionResponse.builder()
                         .userId("5001")
-                        .openId("new-user-1001")
+                        .openId("new-user@example.com")
+                        .account("new-user@example.com")
                         .name("New User")
-                        .phone("13900000000")
+                        .email("new-user@example.com")
                         .token("token")
                         .build()
         );
@@ -147,7 +156,7 @@ class UserControllerAuthenticationIntegrationTest {
                         .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value("ok"))
-                .andExpect(jsonPath("$.data.openId").value("new-user-1001"));
+                .andExpect(jsonPath("$.data.account").value("new-user@example.com"));
 
         verify(userSessionApplicationService).register(any(UserRegisterRequest.class));
     }
@@ -155,9 +164,10 @@ class UserControllerAuthenticationIntegrationTest {
     @Test
     void resetPasswordShouldNotRequireAuthorization() throws Exception {
         UserPasswordResetRequest request = new UserPasswordResetRequest();
-        request.setOpenId("recover-user-1001");
-        request.setPhone("13900000001");
+        request.setAccount("13900000001");
         request.setNewPassword("Reset2026!");
+        request.setConfirmPassword("Reset2026!");
+        request.setVerificationCode("123456");
 
         mockMvc.perform(post("/api/user/auth/password/reset")
                         .contentType(MediaType.APPLICATION_JSON)
@@ -167,6 +177,32 @@ class UserControllerAuthenticationIntegrationTest {
                 .andExpect(jsonPath("$.code").value("ok"));
 
         verify(userSessionApplicationService).resetPassword(any(UserPasswordResetRequest.class));
+    }
+
+    @Test
+    void verificationCodeShouldNotRequireAuthorization() throws Exception {
+        UserVerificationCodeRequest request = new UserVerificationCodeRequest();
+        request.setAccount("13900000001");
+        request.setPurpose("register");
+
+        when(userVerificationCodeApplicationService.send(any(UserVerificationCodeRequest.class))).thenReturn(
+                UserVerificationCodeResponse.builder()
+                        .target("13900000001")
+                        .purpose("register")
+                        .expiresInSeconds(300)
+                        .debugCode("123456")
+                        .build()
+        );
+
+        mockMvc.perform(post("/api/user/auth/verification-code")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .header("X-Request-Id", REQUEST_ID)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value("ok"))
+                .andExpect(jsonPath("$.data.debugCode").value("123456"));
+
+        verify(userVerificationCodeApplicationService).send(any(UserVerificationCodeRequest.class));
     }
 
     @Test

@@ -10,9 +10,11 @@ export const DASHBOARD_ROUTES = {
   products: "/dashboard/products",
   batches: "/dashboard/batches",
   pricing: "/dashboard/pricing",
+  pickupPoints: "/dashboard/pickup-points",
   orderMonitor: "/dashboard/order-monitor",
   orders: "/dashboard/orders",
   lossStatistics: "/dashboard/loss-statistics",
+  operationLogs: "/dashboard/operation-logs",
   aiAssistant: "/dashboard/ai-assistant"
 } as const
 

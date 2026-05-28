@@ -70,6 +70,29 @@ export interface AdminProductCategoryUpsert {
   sort?: number
 }
 
+export interface PickupPoint {
+  id: string
+  name: string
+  address: string
+  contactName?: string
+  contactPhone?: string
+  serviceTime?: string
+  sort?: number
+  enabled: boolean
+  createTime?: string
+  updateTime?: string
+}
+
+export interface PickupPointUpsert {
+  name: string
+  address: string
+  contactName?: string
+  contactPhone?: string
+  serviceTime?: string
+  sort?: number
+  enabled?: boolean
+}
+
 export interface ProductRecord {
   id: string
   name: string
@@ -137,6 +160,10 @@ export interface AdminOrderDetail extends AdminOrderSummary {
   cancelReason?: string
   items: AdminOrderItem[]
   events?: AdminOrderEvent[]
+}
+
+export interface AdminOrderPickupVerifyRequest {
+  pickupCode: string
 }
 
 export interface AdminOrderEvent {
@@ -269,6 +296,50 @@ export interface AdminAiOpsSuggestion {
   availableQuantity: number
   suggestedAction: string
   status?: "pending" | "executed" | "ignored"
+  executionPlan?: AdminAiOpsSuggestionExecutionPlan
+}
+
+export interface AdminAiOpsSuggestionExecutionPlan {
+  targetType: string
+  targetId: string
+  targetName: string
+  operationType: string
+  defaultBatchStatus: BatchStatus
+  summary: string
+  editableFields: string
+}
+
+export interface AdminAiOpsSuggestionAction {
+  id: string
+  suggestionId: string
+  action: "execute" | "ignore"
+  status: "executed" | "ignored"
+  targetType: string
+  targetId: string
+  targetName?: string
+  operationSummary: string
+  operationPayload?: string
+  actorId: number
+  createTime: string
+}
+
+export interface AdminOperationLog {
+  id: string
+  module: string
+  action: string
+  method: string
+  path: string
+  statusCode: number
+  actorId?: number
+  summary: string
+  createTime: string
+}
+
+export interface AdminOperationLogQuery {
+  page: number
+  pageSize: number
+  module?: string
+  action?: string
 }
 
 export interface AdminAiOpsChatResponse {

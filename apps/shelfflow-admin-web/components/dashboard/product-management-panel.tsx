@@ -4,7 +4,7 @@ import { zodResolver } from "@hookform/resolvers/zod"
 import { usePathname, useRouter, useSearchParams } from "next/navigation"
 import { useCallback, useEffect, useMemo, useState } from "react"
 import { useForm } from "react-hook-form"
-import { FolderPlus, Pencil, Plus, RefreshCw, Search, Trash2 } from "lucide-react"
+import { FolderPlus, ImageIcon, Pencil, Plus, RefreshCw, Search, Trash2, Upload } from "lucide-react"
 
 import {
   createAdminProductCategory,
@@ -16,6 +16,7 @@ import {
   isUnauthorizedError,
   logoutRequest,
   updateProduct,
+  uploadProductImage,
 } from "@/lib/client/api"
 import { DASHBOARD_ROUTES, DEFAULT_PAGE_SIZE } from "@/lib/constants"
 import { formatCurrency } from "@/lib/formatters"
@@ -109,6 +110,7 @@ export function ProductManagementPanel() {
   const [categoryDialogOpen, setCategoryDialogOpen] = useState(false)
   const [editingProduct, setEditingProduct] = useState<ProductRecord | null>(null)
   const [confirmAction, setConfirmAction] = useState<ActionConfirmState | null>(null)
+  const [imageUploading, setImageUploading] = useState(false)
 
   const form = useForm<ProductFormValues>({
     resolver: zodResolver(productSchema),
@@ -122,6 +124,7 @@ export function ProductManagementPanel() {
       shelfLifeDays: DEFAULT_PRODUCT_SHELF_LIFE_DAYS,
     },
   })
+  const productImageValue = form.watch("image")
 
   const categoryForm = useForm<ProductCategoryFormValues>({
     resolver: zodResolver(productCategorySchema),
@@ -254,6 +257,34 @@ export function ProductManagementPanel() {
     setDialogOpen(true)
   }
 
+  async function handleProductImageChange(event: React.ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0]
+    event.target.value = ""
+    if (!file) {
+      return
+    }
+
+    setActionError(null)
+    setImageUploading(true)
+
+    try {
+      const result = await uploadProductImage(file)
+      form.setValue("image", result.url, {
+        shouldDirty: true,
+        shouldValidate: true,
+      })
+      setSuccessMessage("商品图片已上传")
+    } catch (uploadError) {
+      if (isUnauthorizedError(uploadError)) {
+        await handleUnauthorized()
+        return
+      }
+      setActionError(getErrorMessage(uploadError, "商品图片上传失败"))
+    } finally {
+      setImageUploading(false)
+    }
+  }
+
   function handleSearchSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault()
     setPage(1)
@@ -289,7 +320,7 @@ export function ProductManagementPanel() {
         setSuccessMessage(`商品 ${values.name} 已更新`)
       } else {
         await createProduct(payload)
-        setSuccessMessage("商品已创建")
+        setSuccessMessage("商品已创建。用户端展示还需要该商品存在起售批次、未过期且有可售库存。")
       }
 
       setDialogOpen(false)
@@ -406,7 +437,7 @@ export function ProductManagementPanel() {
     <div className="mx-auto w-full max-w-[1600px] space-y-6">
       <header className="space-y-2">
         <h1 className="text-2xl font-semibold text-slate-900">商品管理</h1>
-        <p className="text-sm text-slate-600">维护商品资料、分类、售价和上下架状态，批次管理只负责库存批次流转。</p>
+        <p className="text-sm text-slate-600">维护商品资料、分类、售价、图片和上下架状态。用户端只展示已起售且存在可售批次的商品。</p>
       </header>
 
       <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
@@ -630,10 +661,55 @@ export function ProductManagementPanel() {
                   <Textarea className={glassInputClassName} data-testid="admin-product-description" id="description" rows={4} {...form.register("description")} />
                   {form.formState.errors.description ? <p className="text-sm text-red-600">{form.formState.errors.description.message}</p> : null}
                 </div>
+                <div className="grid gap-4 rounded-2xl border border-white/40 bg-white/25 p-4 md:grid-cols-[160px_minmax(0,1fr)]">
+                  <div className="flex h-36 items-center justify-center overflow-hidden rounded-xl border border-white/50 bg-white/45">
+                    {productImageValue ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img alt="商品图片预览" className="h-full w-full object-cover" src={productImageValue} />
+                    ) : (
+                      <div className="flex flex-col items-center gap-2 text-slate-400">
+                        <ImageIcon className="h-8 w-8" />
+                        <span className="text-xs">图片预览</span>
+                      </div>
+                    )}
+                  </div>
+                  <div className="space-y-3">
+                    <div className="space-y-2">
+                      <Label htmlFor="productImage">商品图片</Label>
+                      <Input className={glassInputClassName} id="productImage" placeholder="可粘贴图片地址，或上传本地图片" {...form.register("image")} />
+                      {form.formState.errors.image ? <p className="text-sm text-red-600">{form.formState.errors.image.message}</p> : null}
+                    </div>
+                    <div className="flex flex-wrap items-center gap-3">
+                      <Label className="inline-flex cursor-pointer items-center rounded-md border border-white/50 bg-white/35 px-4 py-2 text-sm font-medium text-slate-700 transition-colors hover:bg-white/55" htmlFor="productImageUpload">
+                        {imageUploading ? <Spinner className="mr-2" /> : <Upload className="mr-2 h-4 w-4" />}
+                        {imageUploading ? "上传中" : "上传图片"}
+                      </Label>
+                      <Input
+                        accept="image/jpeg,image/png,image/webp"
+                        className="hidden"
+                        disabled={imageUploading}
+                        id="productImageUpload"
+                        onChange={handleProductImageChange}
+                        type="file"
+                      />
+                      {productImageValue ? (
+                        <Button
+                          className="border-white/50 bg-white/30 hover:bg-white/50"
+                          onClick={() => form.setValue("image", "", { shouldDirty: true, shouldValidate: true })}
+                          type="button"
+                          variant="outline"
+                        >
+                          清除图片
+                        </Button>
+                      ) : null}
+                    </div>
+                    <p className="text-xs text-slate-500">支持 JPG、PNG、WEBP，单张不超过 3MB。保存商品后，用户端会读取同一个商品图片字段；创建可售批次后才会展示在用户端。</p>
+                  </div>
+                </div>
                 <Button
                   className="border-0 text-white"
                   data-testid="admin-product-submit"
-                  disabled={form.formState.isSubmitting || categories.length === 0}
+                  disabled={form.formState.isSubmitting || imageUploading || categories.length === 0}
                   style={{ background: primaryGradient, boxShadow: primaryShadow }}
                   type="submit"
                 >
@@ -703,7 +779,7 @@ export function ProductManagementPanel() {
                 <Table className="min-w-[900px]">
                   <TableHeader>
                     <TableRow>
-                      <TableHead>商品名称</TableHead>
+                      <TableHead>商品</TableHead>
                       <TableHead>分类</TableHead>
                       <TableHead>售价</TableHead>
                       <TableHead>状态</TableHead>
@@ -713,7 +789,22 @@ export function ProductManagementPanel() {
                   <TableBody>
                     {products.map((product) => (
                       <TableRow key={product.id}>
-                        <TableCell className="font-medium text-slate-900">{product.name}</TableCell>
+                        <TableCell>
+                          <div className="flex items-center gap-3">
+                            <div className="flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-white/50 bg-white/45">
+                              {product.image ? (
+                                // eslint-disable-next-line @next/next/no-img-element
+                                <img alt={product.name} className="h-full w-full object-cover" src={product.image} />
+                              ) : (
+                                <ImageIcon className="h-5 w-5 text-slate-400" />
+                              )}
+                            </div>
+                            <div className="min-w-0">
+                              <p className="truncate font-medium text-slate-900">{product.name}</p>
+                              <p className="text-xs text-slate-500">前台展示需起售批次和可售库存</p>
+                            </div>
+                          </div>
+                        </TableCell>
                         <TableCell>{product.categoryName || categories.find((item) => item.id === product.categoryId)?.name || product.categoryId}</TableCell>
                         <TableCell>{formatCurrency(product.price)}</TableCell>
                         <TableCell>

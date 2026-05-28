@@ -6,6 +6,8 @@ import com.shelfflow.services.common.domain.UserOrderStatus;
 import com.shelfflow.services.common.exception.ApplicationException;
 import org.springframework.stereotype.Component;
 
+import java.time.LocalDateTime;
+
 @Component
 public class AdminOrderFulfillmentPolicy {
 
@@ -88,6 +90,29 @@ public class AdminOrderFulfillmentPolicy {
             return;
         }
         throw new ApplicationException(ErrorCode.CONFLICT, "订单状态流转不合法");
+    }
+
+    public void ensurePickupVerificationAllowed(UserOrderStatus currentStatus,
+                                                UserOrderPayStatus payStatus,
+                                                String expectedPickupCode,
+                                                String submittedPickupCode,
+                                                LocalDateTime pickupDeadline,
+                                                LocalDateTime verifyTime) {
+        if (currentStatus != UserOrderStatus.READY_FOR_PICKUP) {
+            throw new ApplicationException(ErrorCode.CONFLICT, "只有待自提订单可以核销");
+        }
+        if (payStatus != UserOrderPayStatus.PAID) {
+            throw new ApplicationException(ErrorCode.CONFLICT, "订单未支付，不能核销自提");
+        }
+        if (expectedPickupCode == null || expectedPickupCode.isBlank()) {
+            throw new ApplicationException(ErrorCode.CONFLICT, "订单缺少自提码，不能核销");
+        }
+        if (!expectedPickupCode.equalsIgnoreCase(submittedPickupCode.trim())) {
+            throw new ApplicationException(ErrorCode.VALIDATION_ERROR, "自提码不匹配");
+        }
+        if (pickupDeadline != null && pickupDeadline.isBefore(verifyTime)) {
+            throw new ApplicationException(ErrorCode.CONFLICT, "订单已超过自提截止时间，请先人工确认后处理");
+        }
     }
 
     public boolean requiresInventorySettlement(UserOrderStatus targetStatus) {

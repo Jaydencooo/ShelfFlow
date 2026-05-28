@@ -29,39 +29,66 @@ export type OrderEventActorType = "user" | "admin" | "system"
 export interface UserSession {
   userId: string
   openId: string
+  account?: string
   name?: string
   phone?: string
+  email?: string
   token: string
 }
 
 export interface SessionUser {
   userId: string
   openId: string
+  account?: string
   name?: string
   phone?: string
+  email?: string
 }
 
 export interface UserLoginRequest {
-  openId: string
+  account: string
   password: string
 }
 
 export interface UserRegisterRequest {
-  openId: string
-  name?: string
-  phone?: string
+  account: string
+  name: string
   password: string
+  confirmPassword: string
+  verificationCode: string
 }
 
 export interface UserPasswordResetRequest {
-  openId: string
-  phone: string
+  account: string
   newPassword: string
+  confirmPassword: string
+  verificationCode: string
+}
+
+export interface UserPasswordChangeRequest {
+  currentPassword: string
+  newPassword: string
+  confirmPassword: string
+}
+
+export interface UserVerificationCodeRequest {
+  account: string
+  purpose: "register" | "reset_password" | "change_phone" | "change_email"
+}
+
+export interface UserVerificationCodeResponse {
+  target: string
+  purpose: "register" | "reset_password" | "change_phone" | "change_email"
+  expiresInSeconds: number
+  debugCode?: string
 }
 
 export interface UserProfileUpdateRequest {
   name: string
-  phone: string
+  phone?: string
+  email?: string
+  phoneVerificationCode?: string
+  emailVerificationCode?: string
 }
 
 export interface UserPickupContact {
@@ -79,6 +106,17 @@ export interface UserPickupContactRequest {
   label?: string
   detail?: string
   defaultContact?: boolean
+}
+
+export interface PickupPoint {
+  id: string
+  name: string
+  address: string
+  contactName?: string
+  contactPhone?: string
+  serviceTime?: string
+  sort?: number
+  enabled?: boolean
 }
 
 export interface UserCatalogCategory {
@@ -165,6 +203,8 @@ export interface UserOrderSubmitResult {
 export interface UserOrderSubmitRequest {
   remark?: string
   pickupContactId?: string
+  pickupPointId?: string
+  cartItemIds?: string[]
 }
 
 export interface UserOrderCancelRequest {

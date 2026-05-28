@@ -2,7 +2,7 @@
 
 import { useRouter } from "next/navigation"
 import { useCallback, useEffect, useMemo, useState } from "react"
-import { Book, Bot, Edit, MessageSquare, Plus, RefreshCw, Search, Send, Sparkles, Trash2 } from "lucide-react"
+import { Book, Bot, Edit, History, MessageSquare, Plus, RefreshCw, Search, Send, Sparkles, Trash2 } from "lucide-react"
 
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -10,6 +10,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { Spinner } from "@/components/ui/spinner"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Textarea } from "@/components/ui/textarea"
@@ -18,6 +19,7 @@ import {
   deleteAdminAiKnowledge,
   getAdminAiChatHistory,
   getAdminAiKnowledge,
+  getAdminAiOpsSuggestionActions,
   getAdminAiOpsSuggestions,
   isUnauthorizedError,
   logoutRequest,
@@ -26,9 +28,9 @@ import {
   updateAdminAiKnowledge,
 } from "@/lib/client/api"
 import { DASHBOARD_ROUTES } from "@/lib/constants"
-import { formatDate } from "@/lib/formatters"
+import { formatDate, formatDateTime } from "@/lib/formatters"
 import { glassCard, glassDialog, glassInputClassName, primaryGradient, primaryShadow, statusGradients } from "@/lib/glass-styles"
-import type { AdminAiKnowledge, AdminAiKnowledgeUpsert, AdminAiOpsSuggestion } from "@/lib/types"
+import type { AdminAiKnowledge, AdminAiKnowledgeUpsert, AdminAiOpsSuggestion, AdminAiOpsSuggestionAction, BatchStatus } from "@/lib/types"
 import { aiKnowledgeSchema } from "@/lib/validation"
 import type { ActionConfirmState } from "@/components/dashboard/action-confirm-dialog"
 import { ActionConfirmDialog } from "@/components/dashboard/action-confirm-dialog"
@@ -51,6 +53,29 @@ const priorityStyles: Record<AdminAiOpsSuggestion["priority"], { bg: string; tex
 }
 const AI_KNOWLEDGE_PAGE_SIZE = 20
 const AI_SEARCH_DEBOUNCE_MS = 350
+const batchStatusLabels: Record<BatchStatus, string> = {
+  draft: "草稿",
+  active: "起售",
+  paused: "停用",
+  sold_out: "售罄",
+  expired: "过期",
+}
+
+const suggestionActionLabels: Record<AdminAiOpsSuggestionAction["action"], string> = {
+  execute: "执行",
+  ignore: "忽略",
+}
+
+const suggestionActionStatusClasses: Record<AdminAiOpsSuggestionAction["status"], string> = {
+  executed: "border-0 bg-emerald-100 text-emerald-700",
+  ignored: "border-0 bg-slate-200 text-slate-700",
+}
+
+const targetTypeLabels: Record<string, string> = {
+  inventory_batch: "库存批次",
+  pricing_rule: "定价规则",
+  product: "商品",
+}
 
 function currentTime() {
   return new Date().toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit" })
@@ -64,10 +89,26 @@ function getErrorMessage(error: unknown, fallback: string) {
   return error instanceof Error && error.message ? error.message : fallback
 }
 
+function parseOperationPayload(payload?: string) {
+  if (!payload) {
+    return []
+  }
+
+  try {
+    const parsed = JSON.parse(payload) as Record<string, unknown>
+    return Object.entries(parsed)
+      .filter(([, value]) => value !== null && value !== undefined && String(value).trim() !== "")
+      .map(([key, value]) => `${key}: ${String(value)}`)
+  } catch {
+    return [payload]
+  }
+}
+
 export function AiAssistantPanel() {
   const router = useRouter()
   const [knowledge, setKnowledge] = useState<AdminAiKnowledge[]>([])
   const [suggestions, setSuggestions] = useState<AdminAiOpsSuggestion[]>([])
+  const [suggestionActions, setSuggestionActions] = useState<AdminAiOpsSuggestionAction[]>([])
   const [knowledgeTotal, setKnowledgeTotal] = useState(0)
   const [searchTerm, setSearchTerm] = useState("")
   const [debouncedSearchTerm, setDebouncedSearchTerm] = useState("")
@@ -83,6 +124,9 @@ export function AiAssistantPanel() {
   const [actionError, setActionError] = useState<string | null>(null)
   const [successMessage, setSuccessMessage] = useState<string | null>(null)
   const [confirmAction, setConfirmAction] = useState<ActionConfirmState | null>(null)
+  const [selectedSuggestion, setSelectedSuggestion] = useState<AdminAiOpsSuggestion | null>(null)
+  const [suggestionBatchStatus, setSuggestionBatchStatus] = useState<BatchStatus>("paused")
+  const [suggestionOperationNote, setSuggestionOperationNote] = useState("")
 
   const handleUnauthorized = useCallback(async () => {
     await logoutRequest().catch(() => undefined)
@@ -108,14 +152,16 @@ export function AiAssistantPanel() {
     setIsLoading(true)
     setActionError(null)
     try {
-      const [knowledgeResult, suggestionResult, chatHistory] = await Promise.all([
+      const [knowledgeResult, suggestionResult, actionResult, chatHistory] = await Promise.all([
         getAdminAiKnowledge({ page: 1, pageSize: AI_KNOWLEDGE_PAGE_SIZE, keyword: debouncedSearchTerm || undefined, sortBy: "updatedAt", sortOrder: "desc" }),
         getAdminAiOpsSuggestions(),
+        getAdminAiOpsSuggestionActions(),
         getAdminAiChatHistory(chatSessionId)
       ])
       setKnowledge(knowledgeResult.items)
       setKnowledgeTotal(knowledgeResult.total)
       setSuggestions(suggestionResult)
+      setSuggestionActions(actionResult)
       if (chatHistory.length > 0) {
         setChatSessionId(chatHistory[0]?.sessionId)
         setConversation(chatHistory.map((message) => ({
@@ -153,8 +199,9 @@ export function AiAssistantPanel() {
   const metrics = useMemo(() => ({
     knowledge: knowledgeTotal,
     suggestions: suggestions.length,
+    actionRecords: suggestionActions.length,
     highPriority: suggestions.filter((item) => item.priority === "HIGH").length
-  }), [knowledgeTotal, suggestions])
+  }), [knowledgeTotal, suggestions, suggestionActions.length])
 
   function openCreateDialog() {
     setEditingKnowledge(null)
@@ -249,14 +296,24 @@ export function AiAssistantPanel() {
     }
   }
 
-  async function handleSuggestionAction(item: AdminAiOpsSuggestion, action: "execute" | "ignore") {
+  function openSuggestionExecution(item: AdminAiOpsSuggestion) {
+    setSelectedSuggestion(item)
+    setSuggestionBatchStatus(item.executionPlan?.defaultBatchStatus ?? "paused")
+    setSuggestionOperationNote("")
+    setActionError(null)
+    setSuccessMessage(null)
+  }
+
+  async function handleSuggestionAction(item: AdminAiOpsSuggestion, action: "execute" | "ignore", options: { batchStatus?: BatchStatus; operationNote?: string } = {}) {
     setActionError(null)
     setSuccessMessage(null)
     setExecutingSuggestionId(item.id)
     try {
-      await updateAdminAiOpsSuggestionAction(item.id, action)
+      await updateAdminAiOpsSuggestionAction(item.id, { action, batchStatus: options.batchStatus, operationNote: options.operationNote })
       setSuccessMessage(action === "execute" ? `已执行建议：${item.title}` : `已忽略建议：${item.title}`)
       setSuggestions((current) => current.filter((suggestion) => suggestion.id !== item.id))
+      setSuggestionActions(await getAdminAiOpsSuggestionActions())
+      setSelectedSuggestion(null)
     } catch (error) {
       if (isUnauthorizedError(error)) {
         await handleUnauthorized()
@@ -287,7 +344,7 @@ export function AiAssistantPanel() {
         {[
           { label: "知识条目", value: metrics.knowledge, icon: Book, gradient: primaryGradient },
           { label: "运营建议", value: metrics.suggestions, icon: Sparkles, gradient: statusGradients.purple },
-          { label: "高优先级", value: metrics.highPriority, icon: Bot, gradient: statusGradients.error }
+          { label: "执行记录", value: metrics.actionRecords, icon: Bot, gradient: statusGradients.cyan }
         ].map((metric) => {
           const Icon = metric.icon
           return (
@@ -307,6 +364,7 @@ export function AiAssistantPanel() {
             <TabsTrigger className="gap-1 data-[state=active]:bg-white/50 data-[state=active]:text-slate-800 text-slate-600" value="chat"><MessageSquare className="h-4 w-4" />智能问答</TabsTrigger>
             <TabsTrigger className="gap-1 data-[state=active]:bg-white/50 data-[state=active]:text-slate-800 text-slate-600" value="knowledge"><Book className="h-4 w-4" />知识库管理</TabsTrigger>
             <TabsTrigger className="gap-1 data-[state=active]:bg-white/50 data-[state=active]:text-slate-800 text-slate-600" value="suggestions"><Sparkles className="h-4 w-4" />运营建议</TabsTrigger>
+            <TabsTrigger className="gap-1 data-[state=active]:bg-white/50 data-[state=active]:text-slate-800 text-slate-600" value="actions"><History className="h-4 w-4" />执行记录</TabsTrigger>
           </TabsList>
         </div>
 
@@ -387,7 +445,13 @@ export function AiAssistantPanel() {
           <Card className="border-0" style={glassCard}>
             <CardHeader><CardTitle className="text-lg text-slate-800">实时运营建议</CardTitle></CardHeader>
             <CardContent className="grid gap-4 md:grid-cols-2">
-              {suggestions.map((item) => <div className="rounded-xl border border-white/40 bg-white/30 p-4" key={item.id}><div className="flex items-start justify-between gap-3"><div><p className="font-semibold text-slate-900">{item.title}</p><p className="mt-1 text-sm text-slate-600">{item.content}</p></div><Badge className="border-0" style={{ background: priorityStyles[item.priority].bg, color: priorityStyles[item.priority].text }}>{priorityLabels[item.priority]}</Badge></div><p className="mt-3 text-sm font-medium text-blue-600">{item.suggestedAction}</p><div className="mt-4 flex justify-end gap-2"><Button className="border-white/50 bg-white/30 text-slate-700 hover:bg-white/50" disabled={executingSuggestionId === item.id} onClick={() => void handleSuggestionAction(item, "ignore")} size="sm" variant="outline">忽略</Button><Button className="border-0 text-white" disabled={executingSuggestionId === item.id} onClick={() => void handleSuggestionAction(item, "execute")} size="sm" style={{ background: primaryGradient }}>{executingSuggestionId === item.id ? "处理中" : "执行建议"}</Button></div></div>)}
+              {isLoading ? (
+                <div className="flex items-center justify-center rounded-xl border border-white/40 bg-white/30 p-8 text-sm text-slate-500 md:col-span-2">
+                  <Spinner className="mr-2" />
+                  正在生成实时运营建议...
+                </div>
+              ) : null}
+              {suggestions.map((item) => <div className="rounded-xl border border-white/40 bg-white/30 p-4" key={item.id}><div className="flex items-start justify-between gap-3"><div><p className="font-semibold text-slate-900">{item.title}</p><p className="mt-1 text-sm text-slate-600">{item.content}</p></div><Badge className="border-0" style={{ background: priorityStyles[item.priority].bg, color: priorityStyles[item.priority].text }}>{priorityLabels[item.priority]}</Badge></div><p className="mt-3 text-sm font-medium text-blue-600">{item.suggestedAction}</p>{item.executionPlan ? <div className="mt-3 rounded-lg border border-white/40 bg-white/30 p-3 text-sm text-slate-600"><p className="font-medium text-slate-800">执行方案</p><p className="mt-1">{item.executionPlan.summary}</p></div> : null}<div className="mt-4 flex justify-end gap-2"><Button className="border-white/50 bg-white/30 text-slate-700 hover:bg-white/50" disabled={executingSuggestionId === item.id} onClick={() => void handleSuggestionAction(item, "ignore")} size="sm" variant="outline">忽略</Button><Button className="border-0 text-white" disabled={executingSuggestionId === item.id} onClick={() => openSuggestionExecution(item)} size="sm" style={{ background: primaryGradient }}>{executingSuggestionId === item.id ? "处理中" : "执行建议"}</Button></div></div>)}
               {!isLoading && suggestions.length === 0 ? (
                 <div className="rounded-xl border border-white/40 bg-white/30 p-6 text-center text-sm text-slate-500 md:col-span-2">
                   暂无实时运营建议。
@@ -396,7 +460,83 @@ export function AiAssistantPanel() {
             </CardContent>
           </Card>
         </TabsContent>
+
+        <TabsContent className="mt-4" value="actions">
+          <Card className="border-0" style={glassCard}>
+            <CardHeader><CardTitle className="text-lg text-slate-800">运营建议执行记录</CardTitle></CardHeader>
+            <CardContent>
+              <div className="overflow-hidden rounded-xl" style={{ background: "rgba(255, 255, 255, 0.3)" }}>
+                <Table><TableHeader><TableRow className="border-white/30 hover:bg-white/20"><TableHead className="text-slate-700">建议</TableHead><TableHead className="text-slate-700">动作</TableHead><TableHead className="text-slate-700">目标</TableHead><TableHead className="text-slate-700">结果</TableHead><TableHead className="text-slate-700">执行参数</TableHead><TableHead className="text-slate-700">时间</TableHead></TableRow></TableHeader>
+                  <TableBody>
+                    {isLoading ? (
+                      <TableRow>
+                        <TableCell className="py-8 text-center text-slate-500" colSpan={6}>
+                          <span className="inline-flex items-center">
+                            <Spinner className="mr-2" />
+                            正在加载执行记录...
+                          </span>
+                        </TableCell>
+                      </TableRow>
+                    ) : null}
+                    {!isLoading && suggestionActions.map((item) => {
+                      const payloadItems = parseOperationPayload(item.operationPayload)
+                      return (
+                        <TableRow className="border-white/20 transition-colors hover:bg-white/30" key={item.id}>
+                          <TableCell className="text-slate-700">{item.suggestionId}</TableCell>
+                          <TableCell>
+                            <Badge className={suggestionActionStatusClasses[item.status]}>
+                              {suggestionActionLabels[item.action]}
+                            </Badge>
+                          </TableCell>
+                          <TableCell className="text-slate-700">
+                            <p>{item.targetName ?? item.targetId}</p>
+                            <p className="text-xs text-slate-500">{targetTypeLabels[item.targetType] ?? item.targetType}</p>
+                          </TableCell>
+                          <TableCell className="max-w-[320px] text-slate-700">{item.operationSummary}</TableCell>
+                          <TableCell className="max-w-[300px] text-xs text-slate-500">
+                            {payloadItems.length > 0 ? payloadItems.map((payloadItem) => <p key={payloadItem}>{payloadItem}</p>) : "-"}
+                          </TableCell>
+                          <TableCell className="text-slate-700">{formatDateTime(item.createTime)}</TableCell>
+                        </TableRow>
+                      )
+                    })}
+                    {!isLoading && suggestionActions.length === 0 ? (
+                      <TableRow><TableCell className="py-8 text-center text-slate-500" colSpan={6}>暂无运营建议执行记录。</TableCell></TableRow>
+                    ) : null}
+                  </TableBody></Table>
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
       </Tabs>
+      <Dialog onOpenChange={(open) => { if (!open) setSelectedSuggestion(null) }} open={Boolean(selectedSuggestion)}>
+        <DialogContent className="border-0" style={glassDialog}>
+          <DialogHeader><DialogTitle className="text-slate-800">执行运营建议</DialogTitle></DialogHeader>
+          {selectedSuggestion ? (
+            <div className="space-y-4 py-2">
+              <div className="rounded-xl border border-white/40 bg-white/30 p-4">
+                <p className="font-semibold text-slate-900">{selectedSuggestion.title}</p>
+                <p className="mt-2 text-sm leading-6 text-slate-600">{selectedSuggestion.executionPlan?.summary ?? selectedSuggestion.suggestedAction}</p>
+              </div>
+              {selectedSuggestion.executionPlan?.editableFields.includes("batchStatus") ? (
+                <div className="space-y-2">
+                  <Label htmlFor="suggestionBatchStatus">批次状态</Label>
+                  <select className="h-10 w-full rounded-md border border-white/50 bg-white/50 px-3 text-sm text-slate-700 outline-none transition-all focus:bg-white/70" id="suggestionBatchStatus" onChange={(event) => setSuggestionBatchStatus(event.target.value as BatchStatus)} value={suggestionBatchStatus}>
+                    {(["paused", "sold_out", "expired", "active"] as BatchStatus[]).map((status) => <option key={status} value={status}>{batchStatusLabels[status]}</option>)}
+                  </select>
+                </div>
+              ) : null}
+              <div className="space-y-2">
+                <Label htmlFor="suggestionOperationNote">执行备注</Label>
+                <Textarea className="min-h-[96px] border-white/50 bg-white/50 transition-all focus:bg-white/70" id="suggestionOperationNote" onChange={(event) => setSuggestionOperationNote(event.target.value)} placeholder="记录具体处理方式，例如：已通知团长置顶，今晚 20 点前复盘库存。" value={suggestionOperationNote} />
+              </div>
+              <Button className="w-full border-0 text-white" disabled={executingSuggestionId === selectedSuggestion.id} onClick={() => void handleSuggestionAction(selectedSuggestion, "execute", { batchStatus: suggestionBatchStatus, operationNote: suggestionOperationNote })} style={{ background: primaryGradient, boxShadow: primaryShadow }}>
+                {executingSuggestionId === selectedSuggestion.id ? "执行中" : "确认执行"}
+              </Button>
+            </div>
+          ) : null}
+        </DialogContent>
+      </Dialog>
       <ActionConfirmDialog action={confirmAction} onOpenChange={(open) => {
         if (!open) {
           setConfirmAction(null)

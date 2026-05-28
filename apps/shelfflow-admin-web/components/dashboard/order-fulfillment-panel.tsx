@@ -2,7 +2,7 @@
 
 import { usePathname, useRouter, useSearchParams } from "next/navigation"
 import { useCallback, useEffect, useMemo, useState } from "react"
-import { ClipboardList, Eye, History, RefreshCw, Search } from "lucide-react"
+import { CheckCircle2, ClipboardList, Eye, History, Package2, RefreshCw, Search } from "lucide-react"
 
 import {
   getAdminOrderDetail,
@@ -10,6 +10,7 @@ import {
   isUnauthorizedError,
   logoutRequest,
   updateAdminOrderStatus,
+  verifyAdminOrderPickup,
 } from "@/lib/client/api"
 import { DASHBOARD_ROUTES, DEFAULT_PAGE_SIZE } from "@/lib/constants"
 import { formatCurrency, formatDateTime } from "@/lib/formatters"
@@ -69,6 +70,13 @@ const allOrderStatuses: AdminOrderStatus[] = [
 ]
 const fulfillmentStatuses: AdminOrderStatus[] = ["to_prepare", "preparing", "ready_for_pickup", "completed"]
 const paymentStatuses: AdminOrderPayStatus[] = ["unpaid", "paid", "refunded"]
+const orderWorkflowSteps: AdminOrderStatus[] = ["to_prepare", "preparing", "ready_for_pickup", "completed"]
+
+const payStatusClasses: Record<AdminOrderPayStatus, string> = {
+  unpaid: "bg-amber-100 text-amber-700",
+  paid: "bg-emerald-100 text-emerald-700",
+  refunded: "bg-purple-100 text-purple-700",
+}
 
 function getErrorMessage(error: unknown, fallback: string) {
   return error instanceof Error ? error.message : fallback
@@ -124,11 +132,86 @@ function getNextOrderStatus(status: AdminOrderStatus): AdminOrderStatus | null {
   return null
 }
 
+function getOrderActionHint(status: AdminOrderStatus) {
+  if (status === "pending_payment") {
+    return "等待用户支付"
+  }
+  if (status === "to_prepare") {
+    return "下一步：开始备货"
+  }
+  if (status === "preparing") {
+    return "下一步：备货完成"
+  }
+  if (status === "ready_for_pickup") {
+    return "下一步：核销自提"
+  }
+  if (status === "completed") {
+    return "订单已完成"
+  }
+  if (status === "cancelled") {
+    return "订单已取消"
+  }
+  return "订单已退款"
+}
+
+function getWorkflowStepState(orderStatus: AdminOrderStatus, step: AdminOrderStatus) {
+  const currentIndex = orderWorkflowSteps.indexOf(orderStatus)
+  const stepIndex = orderWorkflowSteps.indexOf(step)
+
+  if (currentIndex < 0) {
+    return "pending"
+  }
+  if (stepIndex < currentIndex) {
+    return "done"
+  }
+  if (stepIndex === currentIndex) {
+    return "current"
+  }
+  return "pending"
+}
+
 function OrderStatusBadge({ status }: { status: AdminOrderStatus }) {
   return (
     <span className={`inline-flex rounded-full px-2 py-1 text-xs font-medium ${orderStatusClasses[status]}`}>
       {orderStatusLabels[status]}
     </span>
+  )
+}
+
+function PayStatusBadge({ status }: { status: AdminOrderPayStatus }) {
+  return (
+    <span className={`inline-flex rounded-full px-2 py-1 text-xs font-medium ${payStatusClasses[status]}`}>
+      {payStatusLabels[status]}
+    </span>
+  )
+}
+
+function OrderWorkflowProgress({ status }: { status: AdminOrderStatus }) {
+  return (
+    <div className="grid gap-2 rounded-xl border border-white/40 bg-white/30 p-4 md:grid-cols-4">
+      {orderWorkflowSteps.map((step) => {
+        const state = getWorkflowStepState(status, step)
+        return (
+          <div className="flex items-center gap-2" key={step}>
+            <span
+              className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xs font-semibold ${
+                state === "done"
+                  ? "bg-emerald-500 text-white"
+                  : state === "current"
+                    ? "bg-slate-900 text-white"
+                    : "bg-white/70 text-slate-400"
+              }`}
+            >
+              {state === "done" ? "✓" : orderWorkflowSteps.indexOf(step) + 1}
+            </span>
+            <div className="min-w-0">
+              <p className={`truncate text-sm font-medium ${state === "pending" ? "text-slate-400" : "text-slate-900"}`}>{orderStatusLabels[step]}</p>
+              <p className="text-xs text-slate-500">{state === "current" ? "当前节点" : state === "done" ? "已完成" : "待处理"}</p>
+            </div>
+          </div>
+        )
+      })}
+    </div>
   )
 }
 
@@ -186,6 +269,9 @@ export function OrderFulfillmentPanel(props: {
   const [detailLoading, setDetailLoading] = useState(false)
   const [selectedOrder, setSelectedOrder] = useState<AdminOrderDetail | null>(null)
   const [confirmAction, setConfirmAction] = useState<ActionConfirmState | null>(null)
+  const [pickupVerifyOrder, setPickupVerifyOrder] = useState<AdminOrderSummary | AdminOrderDetail | null>(null)
+  const [pickupVerifyCode, setPickupVerifyCode] = useState("")
+  const [pickupVerifySubmitting, setPickupVerifySubmitting] = useState(false)
   const statusOptions = props.mode === "monitor" ? allOrderStatuses : fulfillmentStatuses
   const isFulfillmentMode = props.mode !== "monitor"
 
@@ -317,6 +403,52 @@ export function OrderFulfillmentPanel(props: {
         await handleUpdateOrderStatus(order)
       },
     })
+  }
+
+  function requestPickupVerification(order: AdminOrderSummary | AdminOrderDetail) {
+    if (order.status !== "ready_for_pickup") {
+      setActionError(`订单 ${order.orderNumber} 当前状态不能核销自提`)
+      return
+    }
+
+    setActionError(null)
+    setSuccessMessage(null)
+    setPickupVerifyOrder(order)
+    setPickupVerifyCode("")
+  }
+
+  async function handlePickupVerification() {
+    if (!pickupVerifyOrder) {
+      return
+    }
+
+    const normalizedPickupCode = pickupVerifyCode.trim()
+    if (!normalizedPickupCode) {
+      setActionError("请输入用户提供的自提码")
+      return
+    }
+
+    setPickupVerifySubmitting(true)
+    setActionError(null)
+    setSuccessMessage(null)
+
+    try {
+      const detail = await verifyAdminOrderPickup(pickupVerifyOrder.id, { pickupCode: normalizedPickupCode })
+      setSelectedOrder(detail)
+      setSuccessMessage(`订单 ${pickupVerifyOrder.orderNumber} 已核销自提并完成`)
+      setPickupVerifyOrder(null)
+      setPickupVerifyCode("")
+      await loadOrders()
+    } catch (verifyError) {
+      if (isUnauthorizedError(verifyError)) {
+        await handleUnauthorized()
+        return
+      }
+
+      setActionError(getErrorMessage(verifyError, "订单自提核销失败"))
+    } finally {
+      setPickupVerifySubmitting(false)
+    }
   }
 
   function handleSearchSubmit(event: React.FormEvent<HTMLFormElement>) {
@@ -502,9 +634,12 @@ export function OrderFulfillmentPanel(props: {
                           </div>
                         </TableCell>
                         <TableCell>{formatCurrency(order.totalAmount)}</TableCell>
-                        <TableCell>{payStatusLabels[order.payStatus]}</TableCell>
+                        <TableCell><PayStatusBadge status={order.payStatus} /></TableCell>
                         <TableCell>
-                          <OrderStatusBadge status={order.status} />
+                          <div className="space-y-1">
+                            <OrderStatusBadge status={order.status} />
+                            <p className="text-xs text-slate-500">{getOrderActionHint(order.status)}</p>
+                          </div>
                         </TableCell>
                         <TableCell>
                           <div className="space-y-1 text-sm">
@@ -514,14 +649,24 @@ export function OrderFulfillmentPanel(props: {
                         </TableCell>
                         <TableCell>{formatDateTime(order.orderTime)}</TableCell>
                         <TableCell>
-                          <div className="flex gap-2">
-                            <Button className="border-white/50 bg-white/30 hover:bg-white/50" onClick={() => void openOrderDetail(order.id)} size="sm" variant="outline">
+                          <div className="flex justify-end gap-2">
+                            <Button className="w-20 border-white/50 bg-white/30 hover:bg-white/50" onClick={() => void openOrderDetail(order.id)} size="sm" variant="outline">
                               <Eye className="mr-2 h-4 w-4" />
                               详情
                             </Button>
                             <Button
+                              disabled={order.status !== "ready_for_pickup"}
+                              className="w-20 border-white/50 bg-white/30 hover:bg-white/50"
+                              onClick={() => requestPickupVerification(order)}
+                              size="sm"
+                              variant="outline"
+                            >
+                              <CheckCircle2 className="mr-2 h-4 w-4" />
+                              核销
+                            </Button>
+                            <Button
                               disabled={!getNextOrderStatus(order.status)}
-                              className="border-white/50 bg-white/30 hover:bg-white/50"
+                              className="w-28 border-white/50 bg-white/30 hover:bg-white/50"
                               onClick={() => requestOrderStatusUpdate(order)}
                               size="sm"
                               variant="outline"
@@ -592,14 +737,17 @@ export function OrderFulfillmentPanel(props: {
                 </div>
               </div>
 
+              <OrderWorkflowProgress status={selectedOrder.status} />
+
               <div className="grid gap-4 md:grid-cols-2">
-                <div className="space-y-2 text-sm">
+                <div className="space-y-2 rounded-xl border border-white/40 bg-white/30 p-4 text-sm">
                   <p className="font-medium text-slate-950">用户信息</p>
                   <p>收货人：{selectedOrder.consignee || selectedOrder.userName || "-"}</p>
                   <p>手机号：{selectedOrder.phone || "-"}</p>
+                  <p>支付状态：<PayStatusBadge status={selectedOrder.payStatus} /></p>
                   <p>备注：{selectedOrder.remark || "-"}</p>
                 </div>
-                <div className="space-y-2 text-sm">
+                <div className="space-y-2 rounded-xl border border-white/40 bg-white/30 p-4 text-sm">
                   <p className="font-medium text-slate-950">自提信息</p>
                   <p>自提点：{selectedOrder.pickupPoint || "-"}</p>
                   <p>自提码：{selectedOrder.pickupCode || "-"}</p>
@@ -621,7 +769,22 @@ export function OrderFulfillmentPanel(props: {
                   <TableBody>
                     {selectedOrder.items.map((item) => (
                       <TableRow key={`${item.productId}-${item.batchId}-${item.name}`}>
-                        <TableCell>{item.name}</TableCell>
+                        <TableCell>
+                          <div className="flex items-center gap-3">
+                            <div className="flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-white/50 bg-white/45">
+                              {item.image ? (
+                                // eslint-disable-next-line @next/next/no-img-element
+                                <img alt={item.name} className="h-full w-full object-cover" src={item.image} />
+                              ) : (
+                                <Package2 className="h-5 w-5 text-slate-400" />
+                              )}
+                            </div>
+                            <div>
+                              <p className="font-medium text-slate-900">{item.name}</p>
+                              <p className="text-xs text-slate-500">{item.productSpec || `商品 ID: ${item.productId}`}</p>
+                            </div>
+                          </div>
+                        </TableCell>
                         <TableCell>{item.batchId || "-"}</TableCell>
                         <TableCell>{item.quantity}</TableCell>
                         <TableCell>{formatCurrency(item.unitPrice)}</TableCell>
@@ -667,6 +830,15 @@ export function OrderFulfillmentPanel(props: {
                   关闭
                 </Button>
                 <Button
+                  disabled={selectedOrder.status !== "ready_for_pickup"}
+                  className="border-white/50 bg-white/30 hover:bg-white/50"
+                  onClick={() => requestPickupVerification(selectedOrder)}
+                  variant="outline"
+                >
+                  <CheckCircle2 className="mr-2 h-4 w-4" />
+                  核销自提
+                </Button>
+                <Button
                   disabled={!getNextOrderStatus(selectedOrder.status)}
                   className="border-0 text-white"
                   style={{ background: primaryGradient, boxShadow: primaryShadow }}
@@ -675,6 +847,73 @@ export function OrderFulfillmentPanel(props: {
                   {getNextOrderStatus(selectedOrder.status)
                     ? `转${orderStatusLabels[getNextOrderStatus(selectedOrder.status)!]}`
                     : "不可流转"}
+                </Button>
+              </div>
+            </div>
+          ) : null}
+        </DialogContent>
+      </Dialog>
+      <Dialog onOpenChange={(open) => {
+        if (!open && !pickupVerifySubmitting) {
+          setPickupVerifyOrder(null)
+          setPickupVerifyCode("")
+        }
+      }} open={Boolean(pickupVerifyOrder)}>
+        <DialogContent className="border-0 sm:max-w-[460px]" style={glassDialog}>
+          <DialogHeader>
+            <DialogTitle>核销社区自提订单</DialogTitle>
+          </DialogHeader>
+
+          {pickupVerifyOrder ? (
+            <div className="space-y-5">
+              <div className="rounded-xl border border-white/40 bg-white/30 p-4 text-sm text-slate-700">
+                <p className="font-medium text-slate-950">订单 {pickupVerifyOrder.orderNumber}</p>
+                <p className="mt-1">请核对用户手机号和订单信息后，输入用户提供的自提码完成核销。核销成功后订单会变为已完成，并结转锁定库存。</p>
+                <div className="mt-3 grid gap-2 text-xs text-slate-500">
+                  <span>用户：{pickupVerifyOrder.consignee || pickupVerifyOrder.userName || "-"}</span>
+                  <span>手机号：{pickupVerifyOrder.phone || "-"}</span>
+                  <span>截止时间：{formatOptionalDateTime(pickupVerifyOrder.pickupDeadline)}</span>
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="pickupVerifyCode">自提码</Label>
+                <Input
+                  autoFocus
+                  className={glassInputClassName}
+                  id="pickupVerifyCode"
+                  maxLength={32}
+                  onChange={(event) => setPickupVerifyCode(event.target.value)}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter") {
+                      event.preventDefault()
+                      void handlePickupVerification()
+                    }
+                  }}
+                  placeholder="输入用户出示的自提码"
+                  value={pickupVerifyCode}
+                />
+              </div>
+
+              <div className="flex justify-end gap-2">
+                <Button
+                  className="border-white/50 bg-white/30 hover:bg-white/50"
+                  disabled={pickupVerifySubmitting}
+                  onClick={() => {
+                    setPickupVerifyOrder(null)
+                    setPickupVerifyCode("")
+                  }}
+                  variant="outline"
+                >
+                  取消
+                </Button>
+                <Button
+                  className="border-0 text-white"
+                  disabled={pickupVerifySubmitting}
+                  onClick={() => void handlePickupVerification()}
+                  style={{ background: primaryGradient, boxShadow: primaryShadow }}
+                >
+                  {pickupVerifySubmitting ? "核销中..." : "确认核销"}
                 </Button>
               </div>
             </div>

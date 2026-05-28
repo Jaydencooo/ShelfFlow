@@ -114,6 +114,48 @@ public class AdminOrderFulfillmentApplicationService {
         return getById(String.valueOf(id));
     }
 
+    @Transactional
+    public AdminOrderDetailResponse verifyPickup(Long actorId, String orderId, String pickupCode) {
+        Long id = adminOrderFulfillmentPolicy.parseRequiredOrderId(orderId);
+        AdminOrderDetailRow row = adminOrderPersistenceMapper.findOrderById(id);
+        adminOrderFulfillmentPolicy.ensureOrderExists(row != null);
+
+        LocalDateTime eventTime = LocalDateTime.now();
+        UserOrderStatus currentStatus = UserOrderStatus.fromLegacy(row.getStatus());
+        UserOrderPayStatus payStatus = UserOrderPayStatus.fromLegacy(row.getPayStatus());
+        adminOrderFulfillmentPolicy.ensurePickupVerificationAllowed(
+                currentStatus,
+                payStatus,
+                row.getPickupCode(),
+                pickupCode,
+                row.getPickupDeadline(),
+                eventTime
+        );
+
+        int affectedRows = adminOrderPersistenceMapper.updateOrderStatus(
+                id,
+                currentStatus.legacyValue(),
+                UserOrderStatus.COMPLETED.legacyValue()
+        );
+        if (affectedRows <= 0) {
+            throw new ApplicationException(ErrorCode.CONFLICT, "订单状态已变化，请刷新后重试");
+        }
+
+        settleInventory(id);
+        adminOrderPersistenceMapper.insertOrderEvent(buildOrderEvent(
+                id,
+                actorId,
+                OrderEventType.FULFILLMENT_UPDATED,
+                currentStatus,
+                UserOrderStatus.COMPLETED,
+                payStatus,
+                payStatus,
+                "管理员核销自提码并完成订单",
+                eventTime
+        ));
+        return getById(String.valueOf(id));
+    }
+
     private void settleInventory(Long orderId) {
         LocalDateTime now = LocalDateTime.now();
         for (AdminOrderItemRow item : adminOrderPersistenceMapper.listOrderItemsByOrderId(orderId)) {

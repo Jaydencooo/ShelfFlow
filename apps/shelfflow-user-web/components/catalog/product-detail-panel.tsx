@@ -4,9 +4,9 @@ import { useEffect, useState } from "react"
 import { usePathname, useRouter } from "next/navigation"
 import Link from "next/link"
 import Image from "next/image"
-import { ArrowLeft, ShoppingCart } from "lucide-react"
+import { ArrowLeft, CheckCircle2, ShoppingCart } from "lucide-react"
 
-import { APP_ROUTES, MAX_CART_ITEM_QUANTITY } from "@/lib/constants"
+import { APP_ROUTES, CART_CHANGED_EVENT_NAME, MAX_CART_ITEM_QUANTITY, SUCCESS_TOAST_DISMISS_MS } from "@/lib/constants"
 import { addCartItem, getProductDetail, isUnauthorizedError } from "@/lib/client/api"
 import { formatCurrency, formatDaysToExpire } from "@/lib/formatters"
 import { buildLoginRedirectPath } from "@/lib/navigation"
@@ -22,6 +22,7 @@ export function ProductDetailPanel({ productId }: { productId: string }) {
   const [loading, setLoading] = useState(true)
   const [submitting, setSubmitting] = useState(false)
   const [quantity, setQuantity] = useState(1)
+  const [successMessage, setSuccessMessage] = useState<string | null>(null)
 
   useEffect(() => {
     setLoading(true)
@@ -31,6 +32,15 @@ export function ProductDetailPanel({ productId }: { productId: string }) {
       .catch((error) => setLoadError(error instanceof Error ? error.message : "商品详情加载失败"))
       .finally(() => setLoading(false))
   }, [productId])
+
+  useEffect(() => {
+    if (!successMessage) {
+      return undefined
+    }
+
+    const timer = window.setTimeout(() => setSuccessMessage(null), SUCCESS_TOAST_DISMISS_MS)
+    return () => window.clearTimeout(timer)
+  }, [successMessage])
 
   if (loading) {
     return <Panel className="p-8 text-sm text-slate-500">加载商品详情中...</Panel>
@@ -58,9 +68,22 @@ export function ProductDetailPanel({ productId }: { productId: string }) {
           <SectionTitle title={product.name} description={product.categoryName} />
           <div className="mt-6 space-y-5">
             {actionError ? <InlineError message={actionError} /> : null}
+            {successMessage ? (
+              <div className="flex items-center justify-between gap-3 rounded-2xl border border-emerald-100 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">
+                <span className="inline-flex items-center gap-2 font-medium">
+                  <CheckCircle2 className="h-4 w-4" />
+                  {successMessage}
+                </span>
+                <Link className="font-semibold text-emerald-900 hover:text-emerald-700" href={APP_ROUTES.cart}>
+                  去购物车
+                </Link>
+              </div>
+            ) : null}
             <div className="flex flex-wrap gap-2">
-              <StatusBadge tone="success">{product.availableQuantity} 件可售</StatusBadge>
-              <StatusBadge tone="info">{formatDaysToExpire(product.daysToExpire)}</StatusBadge>
+              <StatusBadge tone={product.availableQuantity > 0 ? "success" : "danger"}>
+                {product.availableQuantity > 0 ? `${product.availableQuantity} 件可售` : "已售罄"}
+              </StatusBadge>
+              <StatusBadge tone={typeof product.daysToExpire === "number" && product.daysToExpire <= 3 ? "warning" : "info"}>{formatDaysToExpire(product.daysToExpire)}</StatusBadge>
             </div>
             <p className="text-sm leading-7 text-slate-600">{product.description || "暂无商品描述"}</p>
             <div className="flex items-end gap-4">
@@ -119,9 +142,11 @@ export function ProductDetailPanel({ productId }: { productId: string }) {
               onClick={async () => {
                 setSubmitting(true)
                 setActionError(null)
+                setSuccessMessage(null)
                 try {
                   await addCartItem({ productId: product.id, quantity })
-                  router.push(APP_ROUTES.cart)
+                  window.dispatchEvent(new Event(CART_CHANGED_EVENT_NAME))
+                  setSuccessMessage(`已加入购物车，共 ${quantity} 件`)
                 } catch (submitError) {
                   if (isUnauthorizedError(submitError)) {
                     router.push(buildLoginRedirectPath(pathname))
@@ -135,7 +160,7 @@ export function ProductDetailPanel({ productId }: { productId: string }) {
               type="button"
             >
               <ShoppingCart className="mr-2 h-4 w-4" />
-              {submitting ? "加入中..." : "加入购物车"}
+              {product.availableQuantity < 1 ? "已售罄" : submitting ? "加入中..." : "加入购物车"}
             </button>
           </div>
         </Panel>

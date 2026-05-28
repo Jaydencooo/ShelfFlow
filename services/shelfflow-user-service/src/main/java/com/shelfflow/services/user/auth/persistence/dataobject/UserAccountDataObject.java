@@ -10,6 +10,7 @@ public class UserAccountDataObject {
     private String openId;
     private String name;
     private String phone;
+    private String email;
     private String passwordHash;
     private Integer status;
     private LocalDateTime createTime;

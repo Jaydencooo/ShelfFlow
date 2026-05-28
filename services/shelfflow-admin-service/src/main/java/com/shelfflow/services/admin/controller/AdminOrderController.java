@@ -4,6 +4,7 @@ import com.shelfflow.services.admin.order.service.AdminOrderFulfillmentApplicati
 import com.shelfflow.services.common.api.ApiResponse;
 import com.shelfflow.services.common.api.PageResponse;
 import com.shelfflow.services.common.dto.AdminOrderDetailResponse;
+import com.shelfflow.services.common.dto.AdminOrderPickupVerifyRequest;
 import com.shelfflow.services.common.dto.AdminOrderQuery;
 import com.shelfflow.services.common.dto.AdminOrderStatusUpdateRequest;
 import com.shelfflow.services.common.dto.AdminOrderSummaryResponse;
@@ -58,6 +59,19 @@ public class AdminOrderController {
                 adminOrderFulfillmentApplicationService.updateStatus(authenticatedUser.getUserId(), id, requestBody.getOrderStatus()),
                 requestId(request),
                 "订单状态更新成功"
+        );
+    }
+
+    @PostMapping("/{id}/pickup-verification")
+    public ApiResponse<AdminOrderDetailResponse> verifyPickup(AdminAuthenticatedUser authenticatedUser,
+                                                              @PathVariable String id,
+                                                              @Valid @RequestBody AdminOrderPickupVerifyRequest requestBody,
+                                                              HttpServletRequest request) {
+        authenticatedUser.requirePermission(AdminPermission.ORDER_WRITE);
+        return ApiResponse.success(
+                adminOrderFulfillmentApplicationService.verifyPickup(authenticatedUser.getUserId(), id, requestBody.getPickupCode()),
+                requestId(request),
+                "订单自提核销成功"
         );
     }
 

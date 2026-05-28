@@ -14,16 +14,41 @@
             ci.product_spec as productSpec,
             ci.number as quantity,
             ci.amount,
-            greatest(ib.stock_quantity - ib.locked_quantity - ib.sold_quantity, 0) as availableQuantity
+            case
+                when ib.id is null or ib.status != 1 or ib.expiration_time &lt; now() or p.status != 1 or c.status != 1 or c.type != 1 then 0
+                else greatest(ib.stock_quantity - ib.locked_quantity - ib.sold_quantity, 0)
+            end as availableQuantity
         from cart_item ci
-        inner join product p on p.id = ci.product_id
-        inner join category c on c.id = p.category_id
-        inner join inventory_batch ib on ib.id = ci.batch_id
+        left join product p on p.id = ci.product_id
+        left join category c on c.id = p.category_id
+        left join inventory_batch ib on ib.id = ci.batch_id
         where ci.user_id = #{userId}
-          and p.status = 1
-          and c.status = 1
-          and c.type = 1
-          and ib.status = 1
+        order by ci.create_time asc, ci.id asc
+    </select>
+
+    <select id="listCheckoutItemsByUserIdAndCartItemIds" resultType="com.shelfflow.services.user.order.persistence.dataobject.UserOrderCartItemRow">
+        select
+            ci.id as cartItemId,
+            ci.product_id as productId,
+            ci.batch_id as batchId,
+            ci.name,
+            ci.image,
+            ci.product_spec as productSpec,
+            ci.number as quantity,
+            ci.amount,
+            case
+                when ib.id is null or ib.status != 1 or ib.expiration_time &lt; now() or p.status != 1 or c.status != 1 or c.type != 1 then 0
+                else greatest(ib.stock_quantity - ib.locked_quantity - ib.sold_quantity, 0)
+            end as availableQuantity
+        from cart_item ci
+        left join product p on p.id = ci.product_id
+        left join category c on c.id = p.category_id
+        left join inventory_batch ib on ib.id = ci.batch_id
+        where ci.user_id = #{userId}
+          and ci.id in
+          <foreach collection="cartItemIds" item="cartItemId" open="(" separator="," close=")">
+              #{cartItemId}
+          </foreach>
         order by ci.create_time asc, ci.id asc
     </select>
 
@@ -38,18 +63,40 @@
             ci.number as quantity,
             ci.amount,
             case
-                when (ib.stock_quantity - ib.locked_quantity - ib.sold_quantity) &lt; 0 then 0
-                else (ib.stock_quantity - ib.locked_quantity - ib.sold_quantity)
+                when ib.id is null or ib.status != 1 or ib.expiration_time &lt; current_timestamp() or p.status != 1 or c.status != 1 or c.type != 1 then 0
+                else case when (ib.stock_quantity - ib.locked_quantity - ib.sold_quantity) &lt; 0 then 0 else (ib.stock_quantity - ib.locked_quantity - ib.sold_quantity) end
             end as availableQuantity
         from cart_item ci
-        inner join product p on p.id = ci.product_id
-        inner join category c on c.id = p.category_id
-        inner join inventory_batch ib on ib.id = ci.batch_id
+        left join product p on p.id = ci.product_id
+        left join category c on c.id = p.category_id
+        left join inventory_batch ib on ib.id = ci.batch_id
         where ci.user_id = #{userId}
-          and p.status = 1
-          and c.status = 1
-          and c.type = 1
-          and ib.status = 1
+        order by ci.create_time asc, ci.id asc
+    </select>
+
+    <select id="listCheckoutItemsByUserIdAndCartItemIds" databaseId="h2" resultType="com.shelfflow.services.user.order.persistence.dataobject.UserOrderCartItemRow">
+        select
+            ci.id as cartItemId,
+            ci.product_id as productId,
+            ci.batch_id as batchId,
+            ci.name,
+            ci.image,
+            ci.product_spec as productSpec,
+            ci.number as quantity,
+            ci.amount,
+            case
+                when ib.id is null or ib.status != 1 or ib.expiration_time &lt; current_timestamp() or p.status != 1 or c.status != 1 or c.type != 1 then 0
+                else case when (ib.stock_quantity - ib.locked_quantity - ib.sold_quantity) &lt; 0 then 0 else (ib.stock_quantity - ib.locked_quantity - ib.sold_quantity) end
+            end as availableQuantity
+        from cart_item ci
+        left join product p on p.id = ci.product_id
+        left join category c on c.id = p.category_id
+        left join inventory_batch ib on ib.id = ci.batch_id
+        where ci.user_id = #{userId}
+          and ci.id in
+          <foreach collection="cartItemIds" item="cartItemId" open="(" separator="," close=")">
+              #{cartItemId}
+          </foreach>
         order by ci.create_time asc, ci.id asc
     </select>
 
@@ -60,6 +107,7 @@
             update_time = #{updateTime}
         where id = #{batchId}
           and status = 1
+          and expiration_time &gt;= now()
           and (stock_quantity - locked_quantity - sold_quantity) &gt;= #{quantity}
     </update>
 

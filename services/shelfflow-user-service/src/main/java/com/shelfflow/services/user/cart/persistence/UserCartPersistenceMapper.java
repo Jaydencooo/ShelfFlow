@@ -25,5 +25,7 @@ public interface UserCartPersistenceMapper {
 
     int deleteByIdAndUserId(@Param("id") Long id, @Param("userId") Long userId);
 
+    int deleteByIdsAndUserId(@Param("ids") List<Long> ids, @Param("userId") Long userId);
+
     int clearByUserId(@Param("userId") Long userId);
 }

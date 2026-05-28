@@ -21,6 +21,7 @@ import java.util.stream.Collectors;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 @SpringBootTest(classes = ShelfFlowUserServiceApplication.class)
 @ActiveProfiles("test")
@@ -40,7 +41,7 @@ class UserCatalogQueryServiceIntegrationTest {
     }
 
     @Test
-    void pageProductsShouldReturnOnlySellableProductsWithDynamicPrices() {
+    void pageProductsShouldReturnActiveProductsWithDynamicPrices() {
         UserCatalogProductQuery query = new UserCatalogProductQuery();
         query.setSortBy("price");
         query.setSortOrder(SortOrder.ASC);
@@ -63,7 +64,23 @@ class UserCatalogQueryServiceIntegrationTest {
         PageResponse<UserCatalogProductResponse> response = userCatalogQueryService.pageProducts(query);
 
         assertEquals(1L, response.getTotal());
-        assertEquals("Fresh Milk", response.getItems().get(0).getName());
+        List<String> productNames = response.getItems().stream()
+                .map(UserCatalogProductResponse::getName)
+                .toList();
+        assertTrue(productNames.contains("Fresh Milk"));
+    }
+
+    @Test
+    void pageProductsShouldSupportDaysToExpireSort() {
+        UserCatalogProductQuery query = new UserCatalogProductQuery();
+        query.setSortBy("daysToExpire");
+        query.setSortOrder(SortOrder.ASC);
+
+        PageResponse<UserCatalogProductResponse> response = userCatalogQueryService.pageProducts(query);
+
+        assertEquals(2L, response.getTotal());
+        assertEquals("Baguette", response.getItems().get(0).getName());
+        assertEquals("Fresh Milk", response.getItems().get(1).getName());
     }
 
     @Test
@@ -90,7 +107,7 @@ class UserCatalogQueryServiceIntegrationTest {
     }
 
     @Test
-    void getProductDetailShouldRejectUnsellableProduct() {
+    void getProductDetailShouldRejectActiveProductWithoutSellableBatch() {
         assertThrows(ApplicationException.class, () -> userCatalogQueryService.getProductDetail("1004"));
     }
 

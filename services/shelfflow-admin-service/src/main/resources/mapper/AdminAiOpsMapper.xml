@@ -312,4 +312,25 @@
         merge into ai_ops_suggestion_action key(suggestion_id)
         values(default, #{suggestionId}, #{status}, #{actorId}, #{createTime}, #{updateTime})
     </update>
+
+    <insert id="insertSuggestionActionLog" parameterType="com.shelfflow.services.admin.aiops.persistence.dataobject.AdminAiOpsSuggestionActionLogDataObject"
+            useGeneratedKeys="true" keyProperty="id">
+        insert into ai_ops_suggestion_action_log(
+            suggestion_id, action, status, target_type, target_id, target_name,
+            operation_summary, operation_payload, actor_id, create_time
+        )
+        values(
+            #{suggestionId}, #{action}, #{status}, #{targetType}, #{targetId}, #{targetName},
+            #{operationSummary}, #{operationPayload}, #{actorId}, #{createTime}
+        )
+    </insert>
+
+    <select id="listSuggestionActionLogs" resultType="com.shelfflow.services.admin.aiops.persistence.dataobject.AdminAiOpsSuggestionActionLogDataObject">
+        select id, suggestion_id as suggestionId, action, status, target_type as targetType,
+               target_id as targetId, target_name as targetName, operation_summary as operationSummary,
+               operation_payload as operationPayload, actor_id as actorId, create_time as createTime
+        from ai_ops_suggestion_action_log
+        order by create_time desc, id desc
+        limit #{limit}
+    </select>
 </mapper>

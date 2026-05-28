@@ -10,11 +10,8 @@
     "build": "npm run build --workspaces --if-present",
     "lint": "npm run lint --workspaces --if-present",
     "test": "npm run test --workspaces --if-present",
-    "dev:admin-web": "npm run dev -w @shelfflow/admin-web",
-    "dev:user-web": "npm run dev -w @shelfflow/user-web",
-    "smoke:admin-web-ui": "bash scripts/admin-web-ui-smoke.sh",
-    "smoke:user-web-ui": "bash scripts/user-web-ui-smoke.sh",
-    "seed:user-demo": "bash scripts/seed-user-demo-data.sh"
+    "start:admin-web": "bash scripts/start-admin-web.sh",
+    "start:user-web": "bash scripts/start-user-web.sh"
   },
   "engines": {
     "node": ">=24.0.0",

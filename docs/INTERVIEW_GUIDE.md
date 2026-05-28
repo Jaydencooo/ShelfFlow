@@ -140,17 +140,13 @@ to_prepare -> cancelled
 - 单元测试：policy / service 规则
 - MVC integration test：鉴权、参数绑定、controller 行为
 - H2 数据库级 integration test：真实 MyBatis / SQL / service 编排
-- smoke：
-  - 管理端后端 smoke
-  - 跨端订单生命周期 smoke
-  - 用户端后端 smoke
-  - 用户端 UI smoke
+- 前端构建：管理端和用户端 Next.js build
 
 推荐讲法：
 
 > 我没有只停留在 compile 通过。  
-> 我把后端测试做到 H2 数据库级 integration test，又补了 smoke 脚本把管理端、用户端和跨端生命周期跑通。  
-> 最后还给用户端补了浏览器级 UI smoke，让前后端回归入口是标准化的。
+> 我没有只停留在 compile 通过。  
+> 我把后端测试做到 H2 数据库级 integration test，并通过管理端、用户端前端构建保证基础交付质量。
 
 ## 10. 为什么保留 legacy backend
 
@@ -176,7 +172,7 @@ to_prepare -> cancelled
 - 有统一错误码和响应结构
 - 有鉴权上下文
 - 有数据库级集成测试
-- 有 smoke 和 UI 验收脚本
+- 有 Java integration test 和前端 build 验证
 
 ## 12. 面试问到不足时怎么答
 
@@ -195,7 +191,7 @@ to_prepare -> cancelled
 
 > 负责将旧单体业务重构为 Java 微服务项目，使用 Spring Boot / Spring Cloud Alibaba / MyBatis / Redis / MySQL，落地管理端与用户端双端闭环。  
 > 设计以库存批次为核心的领域模型，完成商品、批次、购物车、订单、履约状态流转，以及库存锁定、取消释放、履约结转和订单审计事件追踪等关键链路。  
-> 建立统一响应结构、错误码、鉴权上下文和数据库级集成测试，并通过后端 smoke、跨端订单生命周期 smoke 和浏览器级 UI smoke 构建标准化验收体系。
+> 建立统一响应结构、错误码、鉴权上下文和数据库级集成测试，并通过前端构建与后端测试构建标准化验收体系。
 
 ## 14. 最后建议
 

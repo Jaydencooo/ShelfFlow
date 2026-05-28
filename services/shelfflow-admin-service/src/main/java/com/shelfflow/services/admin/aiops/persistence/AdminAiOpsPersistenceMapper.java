@@ -5,6 +5,7 @@ import com.shelfflow.services.admin.aiops.persistence.dataobject.AdminAiKnowledg
 import com.shelfflow.services.admin.aiops.persistence.dataobject.AdminAiOpsChatMessageDataObject;
 import com.shelfflow.services.admin.aiops.persistence.dataobject.AdminAiOpsChatSessionDataObject;
 import com.shelfflow.services.admin.aiops.persistence.dataobject.AdminAiOpsSuggestionActionDataObject;
+import com.shelfflow.services.admin.aiops.persistence.dataobject.AdminAiOpsSuggestionActionLogDataObject;
 import com.shelfflow.services.admin.aiops.persistence.dataobject.AdminAiOpsSuggestionRow;
 import org.apache.ibatis.annotations.Param;
 
@@ -43,4 +44,8 @@ public interface AdminAiOpsPersistenceMapper {
     AdminAiOpsSuggestionActionDataObject findSuggestionAction(@Param("suggestionId") String suggestionId);
 
     int upsertSuggestionAction(AdminAiOpsSuggestionActionDataObject action);
+
+    int insertSuggestionActionLog(AdminAiOpsSuggestionActionLogDataObject actionLog);
+
+    List<AdminAiOpsSuggestionActionLogDataObject> listSuggestionActionLogs(@Param("limit") int limit);
 }

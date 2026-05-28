@@ -19,6 +19,9 @@ public interface UserOrderPersistenceMapper {
 
     List<UserOrderCartItemRow> listCheckoutItemsByUserId(@Param("userId") Long userId);
 
+    List<UserOrderCartItemRow> listCheckoutItemsByUserIdAndCartItemIds(@Param("userId") Long userId,
+                                                                       @Param("cartItemIds") List<Long> cartItemIds);
+
     int incrementBatchLockedQuantity(@Param("batchId") Long batchId,
                                      @Param("quantity") Integer quantity,
                                      @Param("updateTime") LocalDateTime updateTime);

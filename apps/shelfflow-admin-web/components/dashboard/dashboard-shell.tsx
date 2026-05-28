@@ -11,6 +11,8 @@ import {
   PackageCheck,
   LayoutDashboard,
   LogOut,
+  ListChecks,
+  MapPin,
   Package,
   PanelLeft,
   Search,
@@ -50,6 +52,11 @@ const navigationItems = [
     icon: Tags,
   },
   {
+    href: DASHBOARD_ROUTES.pickupPoints,
+    label: "自提点管理",
+    icon: MapPin,
+  },
+  {
     href: DASHBOARD_ROUTES.orderMonitor,
     label: "订单管理",
     icon: ShoppingCart,
@@ -58,6 +65,11 @@ const navigationItems = [
     href: DASHBOARD_ROUTES.lossStatistics,
     label: "经营分析",
     icon: TrendingDown,
+  },
+  {
+    href: DASHBOARD_ROUTES.operationLogs,
+    label: "操作日志",
+    icon: ListChecks,
   },
   {
     href: DASHBOARD_ROUTES.aiAssistant,
@@ -114,8 +126,16 @@ function resolveGlobalSearchRoute(keyword: string) {
     return DASHBOARD_ROUTES.pricing
   }
 
+  if (normalizedKeyword.includes("自提") || normalizedKeyword.includes("社区") || normalizedKeyword.includes("pickup")) {
+    return DASHBOARD_ROUTES.pickupPoints
+  }
+
   if (normalizedKeyword.includes("损耗") || normalizedKeyword.includes("loss")) {
     return DASHBOARD_ROUTES.lossStatistics
+  }
+
+  if (normalizedKeyword.includes("日志") || normalizedKeyword.includes("操作") || normalizedKeyword.includes("log")) {
+    return DASHBOARD_ROUTES.operationLogs
   }
 
   return DASHBOARD_ROUTES.batches

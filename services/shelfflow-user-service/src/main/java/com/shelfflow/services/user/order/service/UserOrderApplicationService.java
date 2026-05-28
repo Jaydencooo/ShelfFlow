@@ -32,6 +32,8 @@ import com.shelfflow.services.user.order.persistence.dataobject.UserOrderSummary
 import com.shelfflow.services.user.pickupcontact.domain.UserPickupContactPolicy;
 import com.shelfflow.services.user.pickupcontact.persistence.UserPickupContactPersistenceMapper;
 import com.shelfflow.services.user.pickupcontact.persistence.dataobject.UserPickupContactDataObject;
+import com.shelfflow.services.user.pickuppoint.persistence.UserPickupPointPersistenceMapper;
+import com.shelfflow.services.user.pickuppoint.persistence.dataobject.UserPickupPointDataObject;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -49,6 +51,7 @@ public class UserOrderApplicationService {
     private final UserCartPersistenceMapper userCartPersistenceMapper;
     private final UserAccountPersistenceMapper userAccountPersistenceMapper;
     private final UserPickupContactPersistenceMapper userPickupContactPersistenceMapper;
+    private final UserPickupPointPersistenceMapper userPickupPointPersistenceMapper;
     private final UserOrderPolicy userOrderPolicy;
     private final UserPickupContactPolicy userPickupContactPolicy;
     private final UserOrderProperties userOrderProperties;
@@ -57,6 +60,7 @@ public class UserOrderApplicationService {
                                        UserCartPersistenceMapper userCartPersistenceMapper,
                                        UserAccountPersistenceMapper userAccountPersistenceMapper,
                                        UserPickupContactPersistenceMapper userPickupContactPersistenceMapper,
+                                       UserPickupPointPersistenceMapper userPickupPointPersistenceMapper,
                                        UserOrderPolicy userOrderPolicy,
                                        UserPickupContactPolicy userPickupContactPolicy,
                                        UserOrderProperties userOrderProperties) {
@@ -64,6 +68,7 @@ public class UserOrderApplicationService {
         this.userCartPersistenceMapper = userCartPersistenceMapper;
         this.userAccountPersistenceMapper = userAccountPersistenceMapper;
         this.userPickupContactPersistenceMapper = userPickupContactPersistenceMapper;
+        this.userPickupPointPersistenceMapper = userPickupPointPersistenceMapper;
         this.userOrderPolicy = userOrderPolicy;
         this.userPickupContactPolicy = userPickupContactPolicy;
         this.userOrderProperties = userOrderProperties;
@@ -71,8 +76,14 @@ public class UserOrderApplicationService {
 
     @Transactional
     public UserOrderSubmitResponse submit(UserAuthenticatedUser authenticatedUser, UserOrderSubmitRequest request) {
-        List<UserOrderCartItemRow> cartItems = userOrderPersistenceMapper.listCheckoutItemsByUserId(authenticatedUser.getUserId());
+        List<Long> selectedCartItemIds = userOrderPolicy.parseOptionalCartItemIds(request.getCartItemIds());
+        List<UserOrderCartItemRow> cartItems = selectedCartItemIds == null
+                ? userOrderPersistenceMapper.listCheckoutItemsByUserId(authenticatedUser.getUserId())
+                : userOrderPersistenceMapper.listCheckoutItemsByUserIdAndCartItemIds(authenticatedUser.getUserId(), selectedCartItemIds);
         userOrderPolicy.ensureCartNotEmpty(cartItems);
+        if (selectedCartItemIds != null) {
+            userOrderPolicy.ensureSelectedCartItemsMatched(selectedCartItemIds.size(), cartItems.size());
+        }
         userOrderPolicy.ensureCartItemsEligibleForSubmit(cartItems);
 
         LocalDateTime now = LocalDateTime.now();
@@ -87,7 +98,10 @@ public class UserOrderApplicationService {
 
         UserAccountDataObject user = userAccountPersistenceMapper.findById(authenticatedUser.getUserId());
         UserPickupContactDataObject pickupContact = resolvePickupContact(authenticatedUser, request);
-        UserOrderDataObject order = buildOrder(authenticatedUser, request, cartItems, user, pickupContact, now);
+        UserPickupPointDataObject pickupPoint = resolvePickupPoint(request);
+        userOrderPolicy.ensurePickupConsigneePresent(resolveOrderConsignee(user, pickupContact));
+        userOrderPolicy.ensurePickupPhonePresent(resolveOrderPhone(user, pickupContact));
+        UserOrderDataObject order = buildOrder(authenticatedUser, request, cartItems, user, pickupContact, pickupPoint, now);
         userOrderPersistenceMapper.insertOrder(order);
         userOrderPersistenceMapper.insertOrderDetails(buildOrderDetails(order.getId(), cartItems));
         userOrderPersistenceMapper.insertOrderEvent(buildOrderEvent(
@@ -102,7 +116,11 @@ public class UserOrderApplicationService {
                 "用户提交订单",
                 now
         ));
-        userCartPersistenceMapper.clearByUserId(authenticatedUser.getUserId());
+        if (selectedCartItemIds == null) {
+            userCartPersistenceMapper.clearByUserId(authenticatedUser.getUserId());
+        } else {
+            userCartPersistenceMapper.deleteByIdsAndUserId(selectedCartItemIds, authenticatedUser.getUserId());
+        }
 
         return UserOrderSubmitResponse.builder()
                 .id(String.valueOf(order.getId()))
@@ -297,6 +315,7 @@ public class UserOrderApplicationService {
                                            List<UserOrderCartItemRow> cartItems,
                                            UserAccountDataObject user,
                                            UserPickupContactDataObject pickupContact,
+                                           UserPickupPointDataObject pickupPoint,
                                            LocalDateTime now) {
         UserOrderDataObject order = new UserOrderDataObject();
         order.setNumber(userOrderPolicy.nextOrderNumber(now));
@@ -312,7 +331,7 @@ public class UserOrderApplicationService {
         order.setPhone(resolveOrderPhone(user, pickupContact));
         order.setUserName(user == null ? null : user.getName());
         order.setConsignee(resolveOrderConsignee(user, pickupContact));
-        order.setPickupPoint(userOrderPolicy.resolvePickupPoint());
+        order.setPickupPoint(userOrderPolicy.resolvePickupPoint(pickupPoint));
         order.setPreparationMode(userOrderProperties.getDefaultPreparationMode());
         order.setFulfillmentFee(userOrderProperties.getDefaultFulfillmentFee());
         order.setPackageCount(userOrderProperties.getDefaultPackageCount());
@@ -335,6 +354,16 @@ public class UserOrderApplicationService {
                 .filter(contact -> Integer.valueOf(1).equals(contact.getIsDefault()))
                 .findFirst()
                 .orElse(null);
+    }
+
+    private UserPickupPointDataObject resolvePickupPoint(UserOrderSubmitRequest request) {
+        Long pickupPointId = userOrderPolicy.parseOptionalPickupPointId(request.getPickupPointId());
+        if (pickupPointId == null) {
+            return userPickupPointPersistenceMapper.listEnabled().stream().findFirst().orElse(null);
+        }
+        UserPickupPointDataObject pickupPoint = userPickupPointPersistenceMapper.findEnabledById(pickupPointId);
+        userOrderPolicy.ensurePickupPointExists(pickupPoint != null);
+        return pickupPoint;
     }
 
     private String resolveOrderPhone(UserAccountDataObject user, UserPickupContactDataObject pickupContact) {

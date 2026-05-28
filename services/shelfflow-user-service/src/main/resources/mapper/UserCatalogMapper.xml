@@ -16,15 +16,44 @@
         and (ib.stock_quantity - ib.locked_quantity - ib.sold_quantity) &gt; 0
     </sql>
 
+    <sql id="sellableProductExists">
+        exists (
+            select 1
+            from inventory_batch ib_sellable
+            where ib_sellable.product_id = p.id
+              and ib_sellable.status = 1
+              and ib_sellable.expiration_time &gt;= now()
+              and (ib_sellable.stock_quantity - ib_sellable.locked_quantity - ib_sellable.sold_quantity) &gt; 0
+        )
+    </sql>
+
+    <sql id="sellableProductExistsH2">
+        exists (
+            select 1
+            from inventory_batch ib_sellable
+            where ib_sellable.product_id = p.id
+              and ib_sellable.status = 1
+              and ib_sellable.expiration_time &gt;= current_timestamp()
+              and (ib_sellable.stock_quantity - ib_sellable.locked_quantity - ib_sellable.sold_quantity) &gt; 0
+        )
+    </sql>
+
     <select id="listActiveCategories" resultType="com.shelfflow.services.user.catalog.persistence.dataobject.UserCategoryRow">
         select
-            id,
-            name,
-            sort
-        from category
-        where type = #{type}
-          and status = 1
-        order by sort asc, id asc
+            c.id,
+            c.name,
+            c.sort
+        from category c
+        where c.type = #{type}
+          and c.status = 1
+          and exists (
+              select 1
+              from product p
+              where p.category_id = c.id
+                and p.status = 1
+                and <include refid="sellableProductExists"/>
+          )
+        order by c.sort asc, c.id asc
     </select>
 
     <select id="pageActiveProducts" resultType="com.shelfflow.services.user.catalog.persistence.dataobject.UserCatalogProductRow">
@@ -47,6 +76,16 @@
                 order by ib2.expiration_time asc, ib2.id asc
                 limit 1
             ) as recommendedBatchId,
+            case when (
+                select ib2.expiration_time
+                from inventory_batch ib2
+                where ib2.product_id = p.id
+                  and ib2.status = 1
+                  and ib2.expiration_time &gt;= now()
+                  and (ib2.stock_quantity - ib2.locked_quantity - ib2.sold_quantity) &gt; 0
+                order by ib2.expiration_time asc, ib2.id asc
+                limit 1
+            ) is null then 1 else 0 end as expiration_sort_priority,
             (
                 select ib2.expiration_time
                 from inventory_batch ib2
@@ -56,7 +95,7 @@
                   and (ib2.stock_quantity - ib2.locked_quantity - ib2.sold_quantity) &gt; 0
                 order by ib2.expiration_time asc, ib2.id asc
                 limit 1
-            ) as nearestExpirationTime
+            ) as nearest_expiration_time
         from product p
         inner join category c on c.id = p.category_id
         left join inventory_batch ib on ib.product_id = p.id
@@ -64,6 +103,7 @@
             p.status = 1
             and c.type = 1
             and c.status = 1
+            and <include refid="sellableProductExists"/>
             <if test="criteria.keyword != null">
                 and p.name like concat('%', #{criteria.keyword}, '%')
             </if>
@@ -72,7 +112,6 @@
             </if>
         </where>
         group by p.id, p.name, p.category_id, c.name, p.price, p.image, p.description, p.update_time
-        having sum(case when <include refid="availableBatchFilter"/> then (ib.stock_quantity - ib.locked_quantity - ib.sold_quantity) else 0 end) &gt; 0
         order by ${criteria.sortColumn} ${criteria.sortDirection}, p.id desc
         limit #{criteria.limit} offset #{criteria.offset}
     </select>
@@ -97,6 +136,16 @@
                 order by ib2.expiration_time asc, ib2.id asc
                 limit 1
             ) as recommendedBatchId,
+            case when (
+                select ib2.expiration_time
+                from inventory_batch ib2
+                where ib2.product_id = p.id
+                  and ib2.status = 1
+                  and ib2.expiration_time &gt;= current_timestamp()
+                  and (ib2.stock_quantity - ib2.locked_quantity - ib2.sold_quantity) &gt; 0
+                order by ib2.expiration_time asc, ib2.id asc
+                limit 1
+            ) is null then 1 else 0 end as expiration_sort_priority,
             (
                 select ib2.expiration_time
                 from inventory_batch ib2
@@ -106,7 +155,7 @@
                   and (ib2.stock_quantity - ib2.locked_quantity - ib2.sold_quantity) &gt; 0
                 order by ib2.expiration_time asc, ib2.id asc
                 limit 1
-            ) as nearestExpirationTime
+            ) as nearest_expiration_time
         from product p
         inner join category c on c.id = p.category_id
         left join inventory_batch ib on ib.product_id = p.id
@@ -114,6 +163,7 @@
             p.status = 1
             and c.type = 1
             and c.status = 1
+            and <include refid="sellableProductExistsH2"/>
             <if test="criteria.keyword != null">
                 and p.name like concat('%', #{criteria.keyword}, '%')
             </if>
@@ -122,7 +172,6 @@
             </if>
         </where>
         group by p.id, p.name, p.category_id, c.name, p.price, p.image, p.description, p.update_time
-        having sum(case when <include refid="availableBatchFilterH2"/> then (ib.stock_quantity - ib.locked_quantity - ib.sold_quantity) else 0 end) &gt; 0
         order by ${criteria.sortColumn} ${criteria.sortDirection}, p.id desc
         limit #{criteria.limit} offset #{criteria.offset}
     </select>
@@ -138,6 +187,7 @@
                 p.status = 1
                 and c.type = 1
                 and c.status = 1
+                and <include refid="sellableProductExists"/>
                 <if test="criteria.keyword != null">
                     and p.name like concat('%', #{criteria.keyword}, '%')
                 </if>
@@ -146,7 +196,6 @@
                 </if>
             </where>
             group by p.id
-            having sum(case when <include refid="availableBatchFilter"/> then (ib.stock_quantity - ib.locked_quantity - ib.sold_quantity) else 0 end) &gt; 0
         ) product_page_count
     </select>
 
@@ -161,6 +210,7 @@
                 p.status = 1
                 and c.type = 1
                 and c.status = 1
+                and <include refid="sellableProductExistsH2"/>
                 <if test="criteria.keyword != null">
                     and p.name like concat('%', #{criteria.keyword}, '%')
                 </if>
@@ -169,7 +219,6 @@
                 </if>
             </where>
             group by p.id
-            having sum(case when <include refid="availableBatchFilterH2"/> then (ib.stock_quantity - ib.locked_quantity - ib.sold_quantity) else 0 end) &gt; 0
         ) product_page_count
     </select>
 
@@ -214,7 +263,7 @@
                   and (ib2.stock_quantity - ib2.locked_quantity - ib2.sold_quantity) &gt; 0
                 order by ib2.expiration_time asc, ib2.id asc
                 limit 1
-            ) as nearestExpirationTime
+            ) as nearest_expiration_time
         from product p
         inner join category c on c.id = p.category_id
         left join inventory_batch ib on ib.product_id = p.id
@@ -222,8 +271,8 @@
           and p.status = 1
           and c.type = 1
           and c.status = 1
+          and <include refid="sellableProductExists"/>
         group by p.id, p.name, p.category_id, c.name, p.price, p.image, p.description
-        having sum(case when <include refid="availableBatchFilter"/> then (ib.stock_quantity - ib.locked_quantity - ib.sold_quantity) else 0 end) &gt; 0
     </select>
 
     <select id="findSellableProductDetailById" databaseId="h2" resultType="com.shelfflow.services.user.catalog.persistence.dataobject.UserCatalogProductDetailRow">
@@ -255,7 +304,7 @@
                   and (ib2.stock_quantity - ib2.locked_quantity - ib2.sold_quantity) &gt; 0
                 order by ib2.expiration_time asc, ib2.id asc
                 limit 1
-            ) as nearestExpirationTime
+            ) as nearest_expiration_time
         from product p
         inner join category c on c.id = p.category_id
         left join inventory_batch ib on ib.product_id = p.id
@@ -263,8 +312,8 @@
           and p.status = 1
           and c.type = 1
           and c.status = 1
+          and <include refid="sellableProductExistsH2"/>
         group by p.id, p.name, p.category_id, c.name, p.price, p.image, p.description
-        having sum(case when <include refid="availableBatchFilterH2"/> then (ib.stock_quantity - ib.locked_quantity - ib.sold_quantity) else 0 end) &gt; 0
     </select>
 
     <select id="listProductSpecs" resultType="com.shelfflow.services.user.catalog.persistence.dataobject.UserCatalogProductSpecRow">

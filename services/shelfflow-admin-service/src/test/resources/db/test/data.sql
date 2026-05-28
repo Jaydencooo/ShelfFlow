@@ -136,3 +136,11 @@ INSERT INTO order_event_log(id, order_id, event_type, actor_type, actor_id, from
 INSERT INTO ai_knowledge_base(id, title, category, content, create_time, update_time, create_user, update_user) VALUES
     (8001, '乳制品临期处理规范', '处理规范', '乳制品剩余三天内应进入临期专区，结合会员推送和清仓折扣降低损耗。', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 1, 1),
     (8002, '动态定价策略', '定价策略', '临期商品应结合剩余效期、库存深度、历史动销和损耗成本设置折扣。', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 1, 1);
+
+INSERT INTO admin_operation_log(id, actor_id, module, action, method, path, status_code, request_id, summary, create_time) VALUES
+    (9001, 1, 'PRODUCT', 'UPDATE', 'PUT', '/api/admin/products/1001', 200, 'req-log-1', 'PRODUCT UPDATE SUCCESS', DATEADD('MINUTE', -3, CURRENT_TIMESTAMP)),
+    (9002, 1, 'ORDER_FULFILLMENT', 'PICKUP_VERIFY', 'POST', '/api/admin/orders/5002/pickup-verification', 200, 'req-log-2', 'ORDER_FULFILLMENT PICKUP_VERIFY SUCCESS', DATEADD('MINUTE', -2, CURRENT_TIMESTAMP)),
+    (9003, 1, 'INVENTORY_BATCH', 'DELETE', 'DELETE', '/api/admin/inventory-batches/2002', 409, 'req-log-3', 'INVENTORY_BATCH DELETE FAILED', DATEADD('MINUTE', -1, CURRENT_TIMESTAMP));
+
+INSERT INTO pickup_point(id, name, address, contact_name, contact_phone, service_time, sort, status, create_time, update_time, create_user, update_user) VALUES
+    (9001, '滨江社区前置仓 A 区', '滨江花园北门 12 号自提柜旁', '社区团长', '13800000001', '09:00-21:00', 10, 1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 1, 1);

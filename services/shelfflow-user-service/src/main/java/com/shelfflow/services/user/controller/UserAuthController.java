@@ -2,12 +2,16 @@ package com.shelfflow.services.user.controller;
 
 import com.shelfflow.services.common.api.ApiResponse;
 import com.shelfflow.services.common.dto.UserLoginRequest;
+import com.shelfflow.services.common.dto.UserPasswordChangeRequest;
 import com.shelfflow.services.common.dto.UserPasswordResetRequest;
 import com.shelfflow.services.common.dto.UserProfileUpdateRequest;
 import com.shelfflow.services.common.dto.UserRegisterRequest;
 import com.shelfflow.services.common.dto.UserSessionResponse;
+import com.shelfflow.services.common.dto.UserVerificationCodeRequest;
+import com.shelfflow.services.common.dto.UserVerificationCodeResponse;
 import com.shelfflow.services.common.security.UserAuthenticatedUser;
 import com.shelfflow.services.user.auth.service.UserSessionApplicationService;
+import com.shelfflow.services.user.auth.service.UserVerificationCodeApplicationService;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -25,9 +29,22 @@ import javax.validation.Valid;
 public class UserAuthController {
 
     private final UserSessionApplicationService userSessionApplicationService;
+    private final UserVerificationCodeApplicationService userVerificationCodeApplicationService;
 
-    public UserAuthController(UserSessionApplicationService userSessionApplicationService) {
+    public UserAuthController(UserSessionApplicationService userSessionApplicationService,
+                              UserVerificationCodeApplicationService userVerificationCodeApplicationService) {
         this.userSessionApplicationService = userSessionApplicationService;
+        this.userVerificationCodeApplicationService = userVerificationCodeApplicationService;
+    }
+
+    @PostMapping("/verification-code")
+    public ApiResponse<UserVerificationCodeResponse> sendVerificationCode(@Valid @RequestBody UserVerificationCodeRequest request,
+                                                                          HttpServletRequest servletRequest) {
+        return ApiResponse.success(
+                userVerificationCodeApplicationService.send(request),
+                requestId(servletRequest),
+                "验证码已发送"
+        );
     }
 
     @PostMapping("/register")
@@ -52,6 +69,14 @@ public class UserAuthController {
     public ApiResponse<Void> resetPassword(@Valid @RequestBody UserPasswordResetRequest request, HttpServletRequest servletRequest) {
         userSessionApplicationService.resetPassword(request);
         return ApiResponse.success(null, requestId(servletRequest), "密码重置成功");
+    }
+
+    @PostMapping("/password/change")
+    public ApiResponse<Void> changePassword(UserAuthenticatedUser authenticatedUser,
+                                            @Valid @RequestBody UserPasswordChangeRequest request,
+                                            HttpServletRequest servletRequest) {
+        userSessionApplicationService.changePassword(authenticatedUser, request);
+        return ApiResponse.success(null, requestId(servletRequest), "密码修改成功");
     }
 
     @GetMapping("/me")

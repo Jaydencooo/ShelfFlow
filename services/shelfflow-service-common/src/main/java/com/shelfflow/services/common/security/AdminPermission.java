@@ -11,7 +11,8 @@ public enum AdminPermission {
     AI_OPS_READ("ai-ops:read"),
     AI_OPS_WRITE("ai-ops:write"),
     ORDER_READ("order:read"),
-    ORDER_WRITE("order:write");
+    ORDER_WRITE("order:write"),
+    OPERATION_LOG_READ("operation-log:read");
 
     private final String value;
 

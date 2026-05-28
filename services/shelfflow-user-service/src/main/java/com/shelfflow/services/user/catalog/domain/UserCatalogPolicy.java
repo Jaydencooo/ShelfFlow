@@ -52,7 +52,7 @@ public class UserCatalogPolicy {
         }
         return switch (sortBy) {
             case "price" -> "p.price";
-            case "daysToExpire" -> "nearest_expiration_time";
+            case "daysToExpire" -> "expiration_sort_priority, nearest_expiration_time";
             case "updatedAt" -> "p.update_time";
             default -> throw new ApplicationException(ErrorCode.VALIDATION_ERROR, "sortBy 不支持");
         };
@@ -63,7 +63,7 @@ public class UserCatalogPolicy {
             throw new ApplicationException(ErrorCode.INTERNAL_ERROR, "商品价格缺失");
         }
         if (daysToExpire == null || daysToExpire < 0) {
-            return BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP);
+            return listPrice.setScale(2, RoundingMode.HALF_UP);
         }
         BigDecimal effectiveRate = discountRate == null ? DEFAULT_DISCOUNT_RATE : discountRate;
         return listPrice.multiply(effectiveRate).setScale(2, RoundingMode.HALF_UP);

@@ -10,6 +10,7 @@ import com.shelfflow.services.common.dto.AdminAiOpsChatMessageResponse;
 import com.shelfflow.services.common.dto.AdminAiOpsChatRequest;
 import com.shelfflow.services.common.dto.AdminAiOpsChatResponse;
 import com.shelfflow.services.common.dto.AdminAiOpsSuggestionActionRequest;
+import com.shelfflow.services.common.dto.AdminAiOpsSuggestionActionResponse;
 import com.shelfflow.services.common.dto.AdminAiOpsSuggestionResponse;
 import com.shelfflow.services.common.security.AdminAuthenticatedUser;
 import com.shelfflow.services.common.security.AdminPermission;
@@ -53,8 +54,21 @@ public class AdminAiOpsController {
                                                     @Valid @RequestBody AdminAiOpsSuggestionActionRequest requestBody,
                                                     HttpServletRequest request) {
         authenticatedUser.requirePermission(AdminPermission.AI_OPS_WRITE);
-        aiOpsApplicationService.updateSuggestionAction(authenticatedUser.getUserId(), id, requestBody.getAction());
+        aiOpsApplicationService.updateSuggestionAction(
+                authenticatedUser.getUserId(),
+                id,
+                requestBody.getAction(),
+                requestBody.getBatchStatus(),
+                requestBody.getOperationNote()
+        );
         return ApiResponse.success(null, requestId(request), "建议处理成功");
+    }
+
+    @GetMapping("/suggestions/actions")
+    public ApiResponse<List<AdminAiOpsSuggestionActionResponse>> suggestionActions(AdminAuthenticatedUser authenticatedUser,
+                                                                                   HttpServletRequest request) {
+        authenticatedUser.requirePermission(AdminPermission.AI_OPS_READ);
+        return ApiResponse.success(aiOpsApplicationService.suggestionActions(), requestId(request), "查询成功");
     }
 
     @GetMapping("/knowledge")

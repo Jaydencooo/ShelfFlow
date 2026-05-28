@@ -10,7 +10,14 @@ import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 
 @SpringBootApplication(scanBasePackages = "com.shelfflow.services")
-@MapperScan("com.shelfflow.services.user")
+@MapperScan({
+        "com.shelfflow.services.user.auth.persistence",
+        "com.shelfflow.services.user.cart.persistence",
+        "com.shelfflow.services.user.catalog.persistence",
+        "com.shelfflow.services.user.order.persistence",
+        "com.shelfflow.services.user.pickupcontact.persistence",
+        "com.shelfflow.services.user.pickuppoint.persistence"
+})
 @EnableConfigurationProperties({RuntimeProperties.class, JwtProperties.class, UserOrderProperties.class, UserAuthProperties.class})
 public class ShelfFlowUserServiceApplication {
     public static void main(String[] args) {

@@ -13,6 +13,8 @@ import { DASHBOARD_ROUTES } from "@/lib/constants"
 import { formatCurrency } from "@/lib/formatters"
 import { glassCard, primaryGradient, statusGradients } from "@/lib/glass-styles"
 import type { AdminLossStatsOverview, AdminLossStatsSuggestion } from "@/lib/types"
+import type { ActionConfirmState } from "@/components/dashboard/action-confirm-dialog"
+import { ActionConfirmDialog } from "@/components/dashboard/action-confirm-dialog"
 
 const priorityStyles: Record<AdminLossStatsSuggestion["priority"], { bg: string; text: string }> = {
   高: { bg: "rgba(220, 38, 38, 0.15)", text: "#dc2626" },
@@ -36,6 +38,7 @@ export function LossStatisticsPanel() {
   const [successMessage, setSuccessMessage] = useState<string | null>(null)
   const [executingSuggestionId, setExecutingSuggestionId] = useState<string | null>(null)
   const [executedSuggestionIds, setExecutedSuggestionIds] = useState<Set<string>>(() => new Set())
+  const [confirmAction, setConfirmAction] = useState<ActionConfirmState | null>(null)
 
   const handleUnauthorized = useCallback(async () => {
     await logoutRequest().catch(() => undefined)
@@ -196,6 +199,28 @@ export function LossStatisticsPanel() {
     }
   }
 
+  function describeSuggestionExecution(item: AdminLossStatsSuggestion) {
+    if (item.daysToExpire <= 0) {
+      return `将批次 ${item.batchCode} 调整为停用，避免过期库存继续在用户端售卖。`
+    }
+    if (item.daysToExpire <= 3) {
+      return `采纳批次 ${item.batchCode} 的定价建议，为临期库存创建折扣规则。`
+    }
+    return `跳转到批次管理并按批次号 ${item.batchCode} 筛选，便于人工检查库存和履约情况。`
+  }
+
+  function requestExecuteSuggestion(item: AdminLossStatsSuggestion) {
+    setConfirmAction({
+      title: "确认执行处理建议",
+      description: describeSuggestionExecution(item),
+      confirmLabel: "执行建议",
+      onConfirm: async () => {
+        setConfirmAction(null)
+        await executeSuggestion(item)
+      },
+    })
+  }
+
   return (
     <div className="mx-auto w-full max-w-[1600px] space-y-6">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -330,7 +355,7 @@ export function LossStatisticsPanel() {
                     <Button
                       className="border-0 text-white"
                       disabled={executingSuggestionId === item.id}
-                      onClick={() => void executeSuggestion(item)}
+                      onClick={() => requestExecuteSuggestion(item)}
                       size="sm"
                       style={{ background: primaryGradient }}
                       type="button"
@@ -349,6 +374,11 @@ export function LossStatisticsPanel() {
           </CardContent>
         </Card>
       </div>
+      <ActionConfirmDialog action={confirmAction} onOpenChange={(open) => {
+        if (!open) {
+          setConfirmAction(null)
+        }
+      }} />
     </div>
   )
 }

@@ -19,4 +19,5 @@ public class AdminAiOpsSuggestionResponse {
     private Integer availableQuantity;
     private String suggestedAction;
     private String status;
+    private AdminAiOpsSuggestionExecutionPlanResponse executionPlan;
 }

@@ -1,19 +1,19 @@
 @import "tailwindcss";
 
 :root {
-  --background: oklch(0.99 0.004 95.08);
+  --background: #f7faf6;
   --foreground: oklch(0.22 0.024 264.11);
   --card: oklch(1 0 0);
   --card-foreground: oklch(0.22 0.024 264.11);
   --muted: oklch(0.96 0.01 95.45);
   --muted-foreground: oklch(0.48 0.03 256.91);
-  --primary: oklch(0.52 0.12 160.28);
+  --primary: #079669;
   --primary-foreground: oklch(0.99 0 0);
   --border: oklch(0.91 0.008 255.13);
   --ring: oklch(0.63 0.12 160.28);
   --destructive: oklch(0.63 0.2 25.18);
   --destructive-foreground: oklch(0.99 0 0);
-  --radius: 0.75rem;
+  --radius: 1.5rem;
 }
 
 @theme inline {
@@ -46,6 +46,7 @@
 
   body {
     font-family: Arial, Helvetica, sans-serif;
+    text-rendering: geometricPrecision;
   }
 
   a {

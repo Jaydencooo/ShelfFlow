@@ -3,6 +3,7 @@
 import type {
   ApiEnvelope,
   PaginatedResult,
+  PickupPoint,
   SessionUser,
   UserCartItem,
   UserCatalogCategory,
@@ -10,6 +11,7 @@ import type {
   UserCatalogProductDetail,
   UserCatalogProductQuery,
   UserLoginRequest,
+  UserPasswordChangeRequest,
   UserPasswordResetRequest,
   UserPickupContact,
   UserPickupContactRequest,
@@ -20,7 +22,9 @@ import type {
   UserOrderSubmitRequest,
   UserOrderSubmitResult,
   UserOrderSummary,
-  UserRegisterRequest
+  UserRegisterRequest,
+  UserVerificationCodeRequest,
+  UserVerificationCodeResponse
 } from "@/lib/types"
 
 export class ApiClientError extends Error {
@@ -88,8 +92,26 @@ export async function registerRequest(payload: UserRegisterRequest) {
   return parseEnvelope<SessionUser>(response)
 }
 
+export async function sendVerificationCodeRequest(payload: UserVerificationCodeRequest) {
+  const response = await fetch("/api/user/auth/verification-code", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(payload)
+  })
+  return parseEnvelope<UserVerificationCodeResponse>(response)
+}
+
 export async function resetPasswordRequest(payload: UserPasswordResetRequest) {
   const response = await fetch("/api/user/auth/password/reset", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(payload)
+  })
+  return parseEnvelope<null>(response)
+}
+
+export async function changePasswordRequest(payload: UserPasswordChangeRequest) {
+  const response = await fetch("/api/user/auth/password/change", {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify(payload)
@@ -119,6 +141,11 @@ export async function updateProfileRequest(payload: UserProfileUpdateRequest) {
 export async function getPickupContacts() {
   const response = await fetch("/api/user/pickup-contacts", { cache: "no-store" })
   return parseEnvelope<UserPickupContact[]>(response)
+}
+
+export async function getPickupPoints() {
+  const response = await fetch("/api/user/pickup-points", { cache: "no-store" })
+  return parseEnvelope<PickupPoint[]>(response)
 }
 
 export async function createPickupContact(payload: UserPickupContactRequest) {

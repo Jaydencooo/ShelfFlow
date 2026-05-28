@@ -3,6 +3,7 @@ package com.shelfflow.services.common.dto;
 import lombok.Data;
 
 import javax.validation.constraints.Size;
+import java.util.List;
 
 @Data
 public class UserOrderSubmitRequest {
@@ -10,4 +11,9 @@ public class UserOrderSubmitRequest {
     private String remark;
 
     private String pickupContactId;
+
+    @Size(max = 64)
+    private String pickupPointId;
+
+    private List<String> cartItemIds;
 }

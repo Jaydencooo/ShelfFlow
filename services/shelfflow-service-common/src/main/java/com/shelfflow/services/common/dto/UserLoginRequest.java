@@ -7,7 +7,9 @@ import javax.validation.constraints.Size;
 
 @Data
 public class UserLoginRequest {
-    @NotBlank
+    @Size(max = 100)
+    private String account;
+
     @Size(max = 64)
     private String openId;
 

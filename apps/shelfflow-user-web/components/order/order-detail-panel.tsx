@@ -64,7 +64,7 @@ export function OrderDetailPanel({ orderId }: { orderId: string }) {
       {actionError ? <InlineError message={actionError} /> : null}
       {successMessage ? <InlineSuccess message={successMessage} /> : null}
       <OrderDetailCard
-        description="独立订单详情页，适合支付回跳、订单分享和后续履约跟踪。"
+        description="查看自提信息、商品清单和订单进度。"
         onCancel={async () => {
           setConfirmingCancel(true)
         }}

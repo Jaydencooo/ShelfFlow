@@ -4,10 +4,27 @@ server:
 spring:
   application:
     name: ${APP_NAME:shelfflow-user-service}
+  mail:
+    host: ${SHELFFLOW_MAIL_HOST:}
+    port: ${SHELFFLOW_MAIL_PORT:465}
+    username: ${SHELFFLOW_MAIL_USERNAME:}
+    password: ${SHELFFLOW_MAIL_PASSWORD:}
+    protocol: smtp
+    properties:
+      mail:
+        smtp:
+          auth: ${SHELFFLOW_MAIL_SMTP_AUTH:true}
+          ssl:
+            enable: ${SHELFFLOW_MAIL_SSL:true}
+          starttls:
+            enable: ${SHELFFLOW_MAIL_STARTTLS:false}
+          connectiontimeout: ${SHELFFLOW_MAIL_CONNECTION_TIMEOUT_MS:10000}
+          timeout: ${SHELFFLOW_MAIL_TIMEOUT_MS:10000}
+          writetimeout: ${SHELFFLOW_MAIL_WRITE_TIMEOUT_MS:10000}
   datasource:
     url: jdbc:mysql://${DB_HOST:127.0.0.1}:${DB_PORT:3306}/${DB_NAME:shelfflow}?useUnicode=true&characterEncoding=UTF-8&serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true
     username: ${DB_USER:root}
-    password: ${DB_PASSWORD:bape050622}
+    password: ${DB_PASSWORD:}
     driver-class-name: com.mysql.cj.jdbc.Driver
   cloud:
     nacos:
@@ -38,6 +55,14 @@ shelfflow:
       max-password-length: ${USER_AUTH_MAX_PASSWORD_LENGTH:32}
       min-display-name-length: ${USER_AUTH_MIN_DISPLAY_NAME_LENGTH:2}
       max-display-name-length: ${USER_AUTH_MAX_DISPLAY_NAME_LENGTH:32}
+      verification-code-length: ${USER_AUTH_VERIFICATION_CODE_LENGTH:6}
+      verification-code-ttl-seconds: ${USER_AUTH_VERIFICATION_CODE_TTL_SECONDS:300}
+      expose-debug-verification-code: ${USER_AUTH_EXPOSE_DEBUG_VERIFICATION_CODE:true}
+      mail:
+        enabled: ${SHELFFLOW_MAIL_ENABLED:false}
+        from: ${SHELFFLOW_MAIL_FROM:${SHELFFLOW_MAIL_USERNAME:}}
+        from-name: ${SHELFFLOW_MAIL_FROM_NAME:ShelfFlow}
+        subject: ${SHELFFLOW_MAIL_SUBJECT:ShelfFlow 验证码}
     order:
       pickup-point: ${USER_ORDER_PICKUP_POINT:滨江社区前置仓 A 区}
       order-number-prefix: ${USER_ORDER_NUMBER_PREFIX:SFU}

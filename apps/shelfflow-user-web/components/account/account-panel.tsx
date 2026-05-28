@@ -5,8 +5,9 @@ import { useCallback, useEffect, useMemo, useState } from "react"
 import { usePathname, useRouter } from "next/navigation"
 import { CheckCircle2, KeyRound, MapPin, ReceiptText, RefreshCw, Save, ShoppingCart, Star, Trash2, UserCircle2 } from "lucide-react"
 
-import { APP_ROUTES, ORDER_PAGE_SIZE, PICKUP_CONTACT_DETAIL_MAX_LENGTH, PICKUP_CONTACT_LABEL_MAX_LENGTH } from "@/lib/constants"
+import { APP_ROUTES, ORDER_PAGE_SIZE, PICKUP_CONTACT_DETAIL_MAX_LENGTH, PICKUP_CONTACT_LABEL_MAX_LENGTH, SUCCESS_TOAST_DISMISS_MS } from "@/lib/constants"
 import {
+  changePasswordRequest,
   createPickupContact,
   deletePickupContact,
   getCartItems,
@@ -15,6 +16,7 @@ import {
   getSessionRequest,
   isUnauthorizedError,
   setDefaultPickupContact,
+  sendVerificationCodeRequest,
   updatePickupContact,
   updateProfileRequest
 } from "@/lib/client/api"
@@ -26,6 +28,15 @@ import { InlineError, Panel, SectionTitle, StatusBadge } from "@/components/comm
 interface ProfileFormState {
   name: string
   phone: string
+  email: string
+  phoneVerificationCode: string
+  emailVerificationCode: string
+}
+
+interface PasswordFormState {
+  currentPassword: string
+  newPassword: string
+  confirmPassword: string
 }
 
 interface ContactFormState {
@@ -56,13 +67,16 @@ export function AccountPanel() {
   const router = useRouter()
   const pathname = usePathname()
   const [session, setSession] = useState<SessionUser | null>(null)
-  const [profileForm, setProfileForm] = useState<ProfileFormState>({ name: "", phone: "" })
+  const [profileForm, setProfileForm] = useState<ProfileFormState>({ name: "", phone: "", email: "", phoneVerificationCode: "", emailVerificationCode: "" })
+  const [passwordForm, setPasswordForm] = useState<PasswordFormState>({ currentPassword: "", newPassword: "", confirmPassword: "" })
   const [orders, setOrders] = useState<UserOrderSummary[]>([])
   const [cartItems, setCartItems] = useState<UserCartItem[]>([])
   const [contacts, setContacts] = useState<UserPickupContact[]>([])
   const [contactForm, setContactForm] = useState<ContactFormState>(emptyContactForm)
   const [loading, setLoading] = useState(true)
   const [savingProfile, setSavingProfile] = useState(false)
+  const [changingPassword, setChangingPassword] = useState(false)
+  const [sendingProfileCode, setSendingProfileCode] = useState<"phone" | "email" | null>(null)
   const [savingContact, setSavingContact] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [successMessage, setSuccessMessage] = useState<string | null>(null)
@@ -92,11 +106,23 @@ export function AccountPanel() {
       setSession(currentSession)
       setProfileForm({
         name: currentSession.name ?? "",
-        phone: currentSession.phone ?? ""
+        phone: currentSession.phone ?? "",
+        email: currentSession.email ?? "",
+        phoneVerificationCode: "",
+        emailVerificationCode: ""
       })
       setOrders(orderPage.items)
       setCartItems(cart)
       setContacts(pickupContacts)
+      if (pickupContacts.length === 0) {
+        setContactForm({
+          consignee: currentSession.name ?? "",
+          phone: currentSession.phone ?? "",
+          label: "默认自提",
+          detail: "",
+          defaultContact: true
+        })
+      }
     } catch (loadError) {
       if (isUnauthorizedError(loadError)) {
         router.replace(buildLoginRedirectPath(pathname))
@@ -112,6 +138,15 @@ export function AccountPanel() {
   useEffect(() => {
     void loadAccount()
   }, [loadAccount])
+
+  useEffect(() => {
+    if (!successMessage) {
+      return undefined
+    }
+
+    const timer = window.setTimeout(() => setSuccessMessage(null), SUCCESS_TOAST_DISMISS_MS)
+    return () => window.clearTimeout(timer)
+  }, [successMessage])
 
   const metrics = useMemo(() => {
     const pendingPayment = orders.filter((order) => order.status === "pending_payment").length
@@ -133,11 +168,24 @@ export function AccountPanel() {
     setSuccessMessage(null)
 
     try {
+      const phoneChanged = (session?.phone ?? "") !== profileForm.phone.trim()
+      const emailChanged = (session?.email ?? "") !== profileForm.email.trim()
+      if (phoneChanged && !profileForm.phoneVerificationCode.trim()) {
+        setError("修改手机号需要先输入手机号验证码")
+        return
+      }
+      if (emailChanged && !profileForm.emailVerificationCode.trim()) {
+        setError("修改邮箱需要先输入邮箱验证码")
+        return
+      }
       const updated = await updateProfileRequest(profileForm)
       setSession(updated)
       setProfileForm({
         name: updated.name ?? "",
-        phone: updated.phone ?? ""
+        phone: updated.phone ?? "",
+        email: updated.email ?? "",
+        phoneVerificationCode: "",
+        emailVerificationCode: ""
       })
       setSuccessMessage("资料已更新")
     } catch (saveError) {
@@ -149,7 +197,48 @@ export function AccountPanel() {
     } finally {
       setSavingProfile(false)
     }
-  }, [pathname, profileForm, router])
+  }, [pathname, profileForm, router, session])
+
+  const handleSendProfileCode = useCallback(async (target: "phone" | "email") => {
+    setSendingProfileCode(target)
+    setError(null)
+    setSuccessMessage(null)
+    const account = target === "phone" ? profileForm.phone.trim() : profileForm.email.trim()
+    try {
+      if (!account) {
+        setError(target === "phone" ? "请先填写新的手机号" : "请先填写新的邮箱")
+        return
+      }
+      const response = await sendVerificationCodeRequest({
+        account,
+        purpose: target === "phone" ? "change_phone" : "change_email"
+      })
+      setSuccessMessage(response.debugCode ? `验证码已生成：${response.debugCode}` : "验证码已发送")
+    } catch (sendError) {
+      setError(sendError instanceof Error ? sendError.message : "验证码发送失败")
+    } finally {
+      setSendingProfileCode(null)
+    }
+  }, [profileForm.email, profileForm.phone])
+
+  const handleChangePassword = useCallback(async () => {
+    setChangingPassword(true)
+    setError(null)
+    setSuccessMessage(null)
+    try {
+      await changePasswordRequest(passwordForm)
+      setPasswordForm({ currentPassword: "", newPassword: "", confirmPassword: "" })
+      setSuccessMessage("密码已修改，下次登录请使用新密码")
+    } catch (saveError) {
+      if (isUnauthorizedError(saveError)) {
+        router.replace(buildLoginRedirectPath(pathname))
+        return
+      }
+      setError(saveError instanceof Error ? saveError.message : "密码修改失败")
+    } finally {
+      setChangingPassword(false)
+    }
+  }, [passwordForm, pathname, router])
 
   const handleContactSubmit = useCallback(async () => {
     setSavingContact(true)
@@ -204,9 +293,13 @@ export function AccountPanel() {
       await reloadContacts()
       setSuccessMessage("默认联系人已更新")
     } catch (saveError) {
+      if (isUnauthorizedError(saveError)) {
+        router.replace(buildLoginRedirectPath(pathname))
+        return
+      }
       setError(saveError instanceof Error ? saveError.message : "默认联系人设置失败")
     }
-  }, [reloadContacts])
+  }, [pathname, reloadContacts, router])
 
   const handleDeleteContact = useCallback(async (id: string) => {
     setError(null)
@@ -219,9 +312,13 @@ export function AccountPanel() {
       await reloadContacts()
       setSuccessMessage("自提联系人已删除")
     } catch (saveError) {
+      if (isUnauthorizedError(saveError)) {
+        router.replace(buildLoginRedirectPath(pathname))
+        return
+      }
       setError(saveError instanceof Error ? saveError.message : "自提联系人删除失败")
     }
-  }, [contactForm.id, reloadContacts])
+  }, [contactForm.id, pathname, reloadContacts, router])
 
   if (loading) {
     return <Panel className="p-8 text-sm text-slate-500">加载用户中心中...</Panel>
@@ -245,8 +342,9 @@ export function AccountPanel() {
             </div>
             <div>
               <h1 className="text-2xl font-semibold text-slate-950">{session?.name || "ShelfFlow 用户"}</h1>
-              <p className="mt-1 text-sm text-slate-500">账号：{session?.openId || "-"}</p>
+              <p className="mt-1 text-sm text-slate-500">账号：{session?.account || session?.openId || "-"}</p>
               <p className="mt-1 text-sm text-slate-500">手机号：{session?.phone || "未绑定"}</p>
+              <p className="mt-1 text-sm text-slate-500">邮箱：{session?.email || "未绑定"}</p>
             </div>
           </div>
           <div className="grid gap-3 sm:grid-cols-3">
@@ -267,9 +365,23 @@ export function AccountPanel() {
         </div>
       </Panel>
 
+      <div className="grid gap-3 sm:grid-cols-4">
+        {[
+          { href: "#profile", label: "个人资料", description: "昵称、手机号、邮箱" },
+          { href: "#security", label: "账号安全", description: "修改登录密码" },
+          { href: "#pickup", label: "自提联系人", description: "下单默认联系人" },
+          { href: "#recent-orders", label: "最近订单", description: "查看最新状态" }
+        ].map((item) => (
+          <Link className="rounded-2xl border border-white/70 bg-white/90 p-4 shadow-sm transition hover:-translate-y-0.5 hover:shadow-lg hover:shadow-slate-200/70" href={item.href} key={item.href}>
+            <div className="text-sm font-semibold text-slate-950">{item.label}</div>
+            <div className="mt-1 text-xs text-slate-500">{item.description}</div>
+          </Link>
+        ))}
+      </div>
+
       <div className="grid gap-6 lg:grid-cols-[0.8fr_1.2fr]">
         <div className="space-y-6">
-          <Panel className="p-6">
+          <Panel className="scroll-mt-28 p-6" id="profile">
             <SectionTitle title="个人资料" description="用于订单联系人和账户展示。" />
             <div className="mt-5 grid gap-4">
               <label className="grid gap-2 text-sm font-medium text-slate-700">
@@ -284,14 +396,67 @@ export function AccountPanel() {
               </label>
               <label className="grid gap-2 text-sm font-medium text-slate-700">
                 手机号
-                <input
-                  className="rounded-xl border border-slate-200 px-4 py-3 text-sm outline-none transition focus:border-emerald-400"
-                  data-testid="account-profile-phone"
-                  inputMode="tel"
-                  maxLength={11}
-                  onChange={(event) => setProfileForm((current) => ({ ...current, phone: event.target.value }))}
-                  value={profileForm.phone}
-                />
+                <div className="flex gap-2">
+                  <input
+                    className="min-w-0 flex-1 rounded-xl border border-slate-200 px-4 py-3 text-sm outline-none transition focus:border-emerald-400"
+                    data-testid="account-profile-phone"
+                    inputMode="tel"
+                    maxLength={11}
+                    onChange={(event) => setProfileForm((current) => ({ ...current, phone: event.target.value }))}
+                    value={profileForm.phone}
+                  />
+                  <button
+                    className="rounded-xl border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-600 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+                    disabled={sendingProfileCode === "phone" || profileForm.phone.trim() === (session?.phone ?? "")}
+                    onClick={() => void handleSendProfileCode("phone")}
+                    type="button"
+                  >
+                    {sendingProfileCode === "phone" ? "发送中" : "验证码"}
+                  </button>
+                </div>
+                {profileForm.phone.trim() !== (session?.phone ?? "") ? (
+                  <input
+                    className="rounded-xl border border-slate-200 px-4 py-3 text-sm outline-none transition focus:border-emerald-400"
+                    data-testid="account-profile-phone-code"
+                    inputMode="numeric"
+                    maxLength={10}
+                    onChange={(event) => setProfileForm((current) => ({ ...current, phoneVerificationCode: event.target.value }))}
+                    placeholder="输入手机号验证码"
+                    value={profileForm.phoneVerificationCode}
+                  />
+                ) : null}
+              </label>
+              <label className="grid gap-2 text-sm font-medium text-slate-700">
+                邮箱
+                <div className="flex gap-2">
+                  <input
+                    className="min-w-0 flex-1 rounded-xl border border-slate-200 px-4 py-3 text-sm outline-none transition focus:border-emerald-400"
+                    data-testid="account-profile-email"
+                    maxLength={100}
+                    onChange={(event) => setProfileForm((current) => ({ ...current, email: event.target.value }))}
+                    placeholder="name@example.com"
+                    value={profileForm.email}
+                  />
+                  <button
+                    className="rounded-xl border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-600 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+                    disabled={sendingProfileCode === "email" || profileForm.email.trim() === (session?.email ?? "")}
+                    onClick={() => void handleSendProfileCode("email")}
+                    type="button"
+                  >
+                    {sendingProfileCode === "email" ? "发送中" : "验证码"}
+                  </button>
+                </div>
+                {profileForm.email.trim() !== (session?.email ?? "") ? (
+                  <input
+                    className="rounded-xl border border-slate-200 px-4 py-3 text-sm outline-none transition focus:border-emerald-400"
+                    data-testid="account-profile-email-code"
+                    inputMode="numeric"
+                    maxLength={10}
+                    onChange={(event) => setProfileForm((current) => ({ ...current, emailVerificationCode: event.target.value }))}
+                    placeholder="输入邮箱验证码"
+                    value={profileForm.emailVerificationCode}
+                  />
+                ) : null}
               </label>
               <button
                 className="inline-flex items-center justify-center rounded-xl bg-slate-900 px-4 py-3 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-slate-300"
@@ -302,6 +467,39 @@ export function AccountPanel() {
               >
                 <Save className="mr-2 h-4 w-4" />
                 {savingProfile ? "保存中..." : "保存资料"}
+              </button>
+            </div>
+          </Panel>
+
+          <Panel className="scroll-mt-28 p-6" id="security">
+            <SectionTitle title="账号安全" description="修改密码前需要确认当前登录密码。" />
+            <div className="mt-5 grid gap-4">
+              {[
+                { key: "currentPassword", label: "当前密码", placeholder: "请输入当前密码" },
+                { key: "newPassword", label: "新密码", placeholder: "至少 8 位，包含字母和数字" },
+                { key: "confirmPassword", label: "确认新密码", placeholder: "再次输入新密码" }
+              ].map((field) => (
+                <label className="grid gap-2 text-sm font-medium text-slate-700" key={field.key}>
+                  {field.label}
+                  <input
+                    className="rounded-xl border border-slate-200 px-4 py-3 text-sm outline-none transition focus:border-emerald-400"
+                    data-testid={`account-password-${field.key}`}
+                    onChange={(event) => setPasswordForm((current) => ({ ...current, [field.key]: event.target.value }))}
+                    placeholder={field.placeholder}
+                    type="password"
+                    value={passwordForm[field.key as keyof PasswordFormState]}
+                  />
+                </label>
+              ))}
+              <button
+                className="inline-flex items-center justify-center rounded-xl bg-emerald-600 px-4 py-3 text-sm font-semibold text-white transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:bg-emerald-300"
+                data-testid="account-password-save"
+                disabled={changingPassword}
+                onClick={() => void handleChangePassword()}
+                type="button"
+              >
+                <KeyRound className="mr-2 h-4 w-4" />
+                {changingPassword ? "修改中..." : "修改密码"}
               </button>
             </div>
           </Panel>
@@ -317,7 +515,7 @@ export function AccountPanel() {
                 <span className="inline-flex items-center gap-2"><ReceiptText className="h-4 w-4" />查看订单</span>
                 <span>{orders.length} 条最近订单</span>
               </Link>
-              <Link className="flex items-center justify-between rounded-2xl border border-slate-100 px-4 py-3 text-sm font-medium text-slate-700 transition hover:bg-slate-50" href={`${APP_ROUTES.forgotPassword}?next=${encodeURIComponent(APP_ROUTES.account)}`}>
+              <Link className="flex items-center justify-between rounded-2xl border border-slate-100 px-4 py-3 text-sm font-medium text-slate-700 transition hover:bg-slate-50" href="#security">
                 <span className="inline-flex items-center gap-2"><KeyRound className="h-4 w-4" />修改登录密码</span>
                 <span>安全设置</span>
               </Link>
@@ -333,7 +531,7 @@ export function AccountPanel() {
           </Panel>
         </div>
 
-        <Panel className="p-6">
+        <Panel className="scroll-mt-28 p-6" id="pickup">
           <SectionTitle title="自提联系人" description="下单前维护常用联系人，第一位会自动设为默认。" />
           <div className="mt-5 grid gap-5 xl:grid-cols-[0.9fr_1.1fr]">
             <div className="space-y-3">
@@ -451,7 +649,7 @@ export function AccountPanel() {
         </Panel>
       </div>
 
-      <Panel className="p-6">
+      <Panel className="scroll-mt-28 p-6" id="recent-orders">
         <SectionTitle title="最近订单" description="展示最近订单状态，完整操作请进入订单页。" />
         <div className="mt-5 space-y-3">
           {orders.length === 0 ? (

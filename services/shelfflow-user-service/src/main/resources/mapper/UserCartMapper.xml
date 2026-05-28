@@ -16,12 +16,14 @@
             ci.amount,
             ci.create_time as createTime,
             case
-                when ib.id is null then 0
+                when ib.id is null or ib.status != 1 or ib.expiration_time &lt; now() or p.status != 1 or c.status != 1 or c.type != 1 then 0
                 else greatest(ib.stock_quantity - ib.locked_quantity - ib.sold_quantity, 0)
             end as availableQuantity,
             ib.expiration_time as expirationTime
         from cart_item ci
         left join inventory_batch ib on ib.id = ci.batch_id
+        left join product p on p.id = ci.product_id
+        left join category c on c.id = p.category_id
         where ci.user_id = #{userId}
         order by ci.create_time desc, ci.id desc
     </select>
@@ -38,12 +40,14 @@
             ci.amount,
             ci.create_time as createTime,
             case
-                when ib.id is null then 0
+                when ib.id is null or ib.status != 1 or ib.expiration_time &lt; current_timestamp() or p.status != 1 or c.status != 1 or c.type != 1 then 0
                 else case when (ib.stock_quantity - ib.locked_quantity - ib.sold_quantity) &lt; 0 then 0 else (ib.stock_quantity - ib.locked_quantity - ib.sold_quantity) end
             end as availableQuantity,
             ib.expiration_time as expirationTime
         from cart_item ci
         left join inventory_batch ib on ib.id = ci.batch_id
+        left join product p on p.id = ci.product_id
+        left join category c on c.id = p.category_id
         where ci.user_id = #{userId}
         order by ci.create_time desc, ci.id desc
     </select>
@@ -83,12 +87,14 @@
             ci.amount,
             ci.create_time as createTime,
             case
-                when ib.id is null then 0
+                when ib.id is null or ib.status != 1 or ib.expiration_time &lt; now() or p.status != 1 or c.status != 1 or c.type != 1 then 0
                 else greatest(ib.stock_quantity - ib.locked_quantity - ib.sold_quantity, 0)
             end as availableQuantity,
             ib.expiration_time as expirationTime
         from cart_item ci
         left join inventory_batch ib on ib.id = ci.batch_id
+        left join product p on p.id = ci.product_id
+        left join category c on c.id = p.category_id
         where ci.id = #{id}
           and ci.user_id = #{userId}
         limit 1
@@ -106,12 +112,14 @@
             ci.amount,
             ci.create_time as createTime,
             case
-                when ib.id is null then 0
+                when ib.id is null or ib.status != 1 or ib.expiration_time &lt; current_timestamp() or p.status != 1 or c.status != 1 or c.type != 1 then 0
                 else case when (ib.stock_quantity - ib.locked_quantity - ib.sold_quantity) &lt; 0 then 0 else (ib.stock_quantity - ib.locked_quantity - ib.sold_quantity) end
             end as availableQuantity,
             ib.expiration_time as expirationTime
         from cart_item ci
         left join inventory_batch ib on ib.id = ci.batch_id
+        left join product p on p.id = ci.product_id
+        left join category c on c.id = p.category_id
         where ci.id = #{id}
           and ci.user_id = #{userId}
         limit 1
@@ -154,6 +162,15 @@
         delete from cart_item
         where id = #{id}
           and user_id = #{userId}
+    </delete>
+
+    <delete id="deleteByIdsAndUserId">
+        delete from cart_item
+        where user_id = #{userId}
+          and id in
+          <foreach collection="ids" item="id" open="(" separator="," close=")">
+              #{id}
+          </foreach>
     </delete>
 
     <delete id="clearByUserId">

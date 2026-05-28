@@ -8,7 +8,9 @@ import lombok.Data;
 public class UserSessionResponse {
     private String userId;
     private String openId;
+    private String account;
     private String name;
     private String phone;
+    private String email;
     private String token;
 }

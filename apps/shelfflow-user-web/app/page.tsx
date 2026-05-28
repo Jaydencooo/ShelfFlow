@@ -1,7 +1,11 @@
-import { redirect } from "next/navigation"
+import { Suspense } from "react"
 
-import { APP_ROUTES } from "@/lib/constants"
+import { ProductCatalogPanel } from "@/components/catalog/product-catalog-panel"
 
 export default function IndexPage() {
-  redirect(APP_ROUTES.products)
+  return (
+    <Suspense fallback={<div className="rounded-2xl border border-white/70 bg-white/90 p-8 text-sm text-slate-500 shadow-sm">加载商品中...</div>}>
+      <ProductCatalogPanel />
+    </Suspense>
+  )
 }

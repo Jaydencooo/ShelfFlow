@@ -35,6 +35,16 @@ export const productCategorySchema = z.object({
   name: z.string().trim().min(1, "分类名称不能为空").max(32, "分类名称不能超过 32 个字符")
 })
 
+export const pickupPointSchema = z.object({
+  name: z.string().trim().min(1, "自提点名称不能为空").max(64, "自提点名称不能超过 64 个字符"),
+  address: z.string().trim().min(1, "自提点地址不能为空").max(160, "自提点地址不能超过 160 个字符"),
+  contactName: z.string().trim().max(32, "联系人不能超过 32 个字符").optional().or(z.literal("")),
+  contactPhone: z.string().trim().max(32, "联系电话不能超过 32 个字符").optional().or(z.literal("")),
+  serviceTime: z.string().trim().max(80, "服务时间不能超过 80 个字符").optional().or(z.literal("")),
+  sort: z.coerce.number().int().min(0, "排序不能小于 0").max(100000, "排序不能超过 100000").optional(),
+  enabled: z.boolean().default(true)
+})
+
 export const batchSchema = z.object({
   productId: z.string().trim().min(1, "请选择商品"),
   batchCode: z.string().trim().min(4, "批次号至少 4 位").max(64, "批次号不能超过 64 位"),
@@ -92,6 +102,17 @@ export const adminOrderQuerySchema = z.object({
   sortOrder: sortOrderSchema.default("desc")
 })
 
+export const adminOrderPickupVerifySchema = z.object({
+  pickupCode: z.string().trim().min(1, "请输入用户提供的自提码").max(32, "自提码不能超过 32 位")
+})
+
+export const operationLogQuerySchema = z.object({
+  page: z.coerce.number().int().min(1).default(1),
+  pageSize: z.coerce.number().int().min(1).max(100).default(20),
+  module: z.string().trim().max(64).optional(),
+  action: z.string().trim().max(64).optional()
+})
+
 export const pricingRuleSchema = z.object({
   name: z.string().trim().min(2, "请输入规则名称").max(64, "规则名称不能超过 64 个字符"),
   minDaysToExpire: z.coerce.number().int().min(0, "最小天数不能小于 0").max(3650, "天数不能超过 3650"),
@@ -141,6 +162,8 @@ export const aiChatSchema = z.object({
 export type LoginFormValues = z.infer<typeof loginSchema>
 export type ProductFormValues = z.infer<typeof productSchema>
 export type ProductCategoryFormValues = z.infer<typeof productCategorySchema>
+export type PickupPointFormValues = z.infer<typeof pickupPointSchema>
 export type BatchFormValues = z.infer<typeof batchSchema>
 export type PricingRuleFormValues = z.infer<typeof pricingRuleSchema>
 export type AiKnowledgeFormValues = z.infer<typeof aiKnowledgeSchema>
+export type AdminOrderPickupVerifyFormValues = z.infer<typeof adminOrderPickupVerifySchema>

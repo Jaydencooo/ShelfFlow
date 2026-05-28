@@ -104,6 +104,29 @@ class AdminOrderFulfillmentApplicationServiceIntegrationTest {
     }
 
     @Test
+    void verifyPickupShouldCompleteOrderAndSettleInventory() {
+        InventoryBatchDataObject before = inventoryBatchPersistenceMapper.findDataById(2001L);
+
+        AdminOrderDetailResponse response = adminOrderFulfillmentApplicationService.verifyPickup(
+                99L,
+                "5002",
+                "721903"
+        );
+
+        InventoryBatchDataObject after = inventoryBatchPersistenceMapper.findDataById(2001L);
+        assertEquals(UserOrderStatus.COMPLETED, response.getStatus());
+        assertEquals(before.getLockedQuantity() - 1, after.getLockedQuantity());
+        assertEquals(before.getSoldQuantity() + 1, after.getSoldQuantity());
+        assertTrue(response.getEvents().get(response.getEvents().size() - 1).getNote().contains("核销自提码"));
+    }
+
+    @Test
+    void verifyPickupShouldRejectInvalidPickupCode() {
+        assertThrows(ApplicationException.class,
+                () -> adminOrderFulfillmentApplicationService.verifyPickup(99L, "5002", "000000"));
+    }
+
+    @Test
     void updateStatusShouldRejectSkippedTransition() {
         assertThrows(ApplicationException.class,
                 () -> adminOrderFulfillmentApplicationService.updateStatus(99L, "5001", UserOrderStatus.READY_FOR_PICKUP));
