@@ -8,6 +8,7 @@ import com.shelfflow.services.user.order.persistence.dataobject.UserOrderEventDa
 import com.shelfflow.services.user.order.persistence.dataobject.UserOrderItemRow;
 import com.shelfflow.services.user.order.persistence.dataobject.UserOrderPageCriteria;
 import com.shelfflow.services.user.order.persistence.dataobject.UserOrderSummaryRow;
+import com.shelfflow.services.user.order.persistence.dataobject.UserOrderTimeoutCandidateRow;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
 
@@ -46,6 +47,11 @@ public interface UserOrderPersistenceMapper {
 
     UserOrderDetailRow findOrderByIdAndUserId(@Param("id") Long id, @Param("userId") Long userId);
 
+    List<UserOrderTimeoutCandidateRow> listTimeoutCloseCandidates(@Param("deadline") LocalDateTime deadline,
+                                                                  @Param("status") Integer status,
+                                                                  @Param("payStatus") Integer payStatus,
+                                                                  @Param("limit") Integer limit);
+
     void insertOrderEvent(UserOrderEventDataObject orderEvent);
 
     int cancelOrder(@Param("id") Long id,
@@ -57,4 +63,12 @@ public interface UserOrderPersistenceMapper {
                  @Param("status") Integer status,
                  @Param("payStatus") Integer payStatus,
                  @Param("checkoutTime") LocalDateTime checkoutTime);
+
+    int timeoutCancelOrder(@Param("id") Long id,
+                           @Param("pendingStatus") Integer pendingStatus,
+                           @Param("unpaidPayStatus") Integer unpaidPayStatus,
+                           @Param("cancelledStatus") Integer cancelledStatus,
+                           @Param("cancelReason") String cancelReason,
+                           @Param("cancelTime") LocalDateTime cancelTime,
+                           @Param("deadline") LocalDateTime deadline);
 }

@@ -46,6 +46,9 @@ class UserOrderApplicationServiceIntegrationTest {
     @Autowired
     private UserOrderPersistenceMapper userOrderPersistenceMapper;
 
+    @Autowired
+    private UserOrderTimeoutCloseService userOrderTimeoutCloseService;
+
     @Test
     void submitShouldCreateOrderLockInventoryAndClearCart() {
         UserCartItemAddRequest request = new UserCartItemAddRequest();
@@ -217,5 +220,17 @@ class UserOrderApplicationServiceIntegrationTest {
         assertEquals("to_prepare", detailResponse.getStatus().value());
 
         assertThrows(ApplicationException.class, () -> userOrderApplicationService.payOrder(USER, "5001"));
+    }
+
+    @Test
+    void timeoutCloseShouldCancelExpiredPendingPaymentOrdersAndReleaseStock() {
+        int closedCount = userOrderTimeoutCloseService.closeExpiredPendingPaymentOrders(LocalDateTime.now().plusHours(1));
+
+        assertEquals(1, closedCount);
+        UserOrderDetailResponse detailResponse = userOrderApplicationService.getOrderDetail(USER, "5001");
+        assertEquals("cancelled", detailResponse.getStatus().value());
+        assertEquals("订单超时未支付，系统自动取消", detailResponse.getCancelReason());
+        assertEquals("system", detailResponse.getEvents().get(detailResponse.getEvents().size() - 1).getActorType().value());
+        assertEquals("cancelled", detailResponse.getEvents().get(detailResponse.getEvents().size() - 1).getEventType().value());
     }
 }

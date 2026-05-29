@@ -19,6 +19,7 @@ public class UserOrderProperties {
     private int defaultPackageCount = 0;
     private InventoryReservation inventoryReservation = new InventoryReservation();
     private Events events = new Events();
+    private TimeoutClose timeoutClose = new TimeoutClose();
 
     @Data
     public static class InventoryReservation {
@@ -40,5 +41,14 @@ public class UserOrderProperties {
         private String routingKeyPrefix = "shelfflow.order";
         private boolean durableExchange = true;
         private boolean failFast;
+    }
+
+    @Data
+    public static class TimeoutClose {
+        private boolean enabled;
+        private long unpaidTimeoutMinutes = 30;
+        private long fixedDelayMilliseconds = 60000;
+        private int batchSize = 100;
+        private String cancelReason = "订单超时未支付，系统自动取消";
     }
 }

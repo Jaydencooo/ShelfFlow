@@ -324,6 +324,23 @@
         limit 1
     </select>
 
+    <select id="listTimeoutCloseCandidates" resultType="com.shelfflow.services.user.order.persistence.dataobject.UserOrderTimeoutCandidateRow">
+        select
+            o.id,
+            o.number,
+            o.status,
+            o.user_id as userId,
+            o.pay_status as payStatus,
+            o.amount,
+            o.order_time as orderTime
+        from orders o
+        where o.status = #{status}
+          and o.pay_status = #{payStatus}
+          and o.order_time &lt;= #{deadline}
+        order by o.order_time asc, o.id asc
+        limit #{limit}
+    </select>
+
     <update id="cancelOrder">
         update orders
         set
@@ -343,5 +360,17 @@
         where id = #{id}
           and status = 1
           and pay_status = 0
+    </update>
+
+    <update id="timeoutCancelOrder">
+        update orders
+        set
+            status = #{cancelledStatus},
+            cancel_reason = #{cancelReason},
+            cancel_time = #{cancelTime}
+        where id = #{id}
+          and status = #{pendingStatus}
+          and pay_status = #{unpaidPayStatus}
+          and order_time &lt;= #{deadline}
     </update>
 </mapper>
