@@ -1,0 +1,16 @@
+spring:
+  application:
+    name: ${APP_NAME:shelfflow-user-service}
+  cloud:
+    nacos:
+      config:
+        enabled: ${SHELFFLOW_NACOS_CONFIG_ENABLED:false}
+        server-addr: ${SHELFFLOW_NACOS_SERVER_ADDR:127.0.0.1:8848}
+        namespace: ${SHELFFLOW_NACOS_NAMESPACE:}
+        group: ${SHELFFLOW_NACOS_GROUP:DEFAULT_GROUP}
+        file-extension: yaml
+        refresh-enabled: ${SHELFFLOW_NACOS_CONFIG_REFRESH_ENABLED:true}
+        shared-configs:
+          - data-id: ${SHELFFLOW_NACOS_SHARED_DATA_ID:shelfflow-common.yaml}
+            group: ${SHELFFLOW_NACOS_GROUP:DEFAULT_GROUP}
+            refresh: ${SHELFFLOW_NACOS_CONFIG_REFRESH_ENABLED:true}

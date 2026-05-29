@@ -1,0 +1,59 @@
+shelfflow:
+  gateway:
+    sentinel:
+      enabled: true
+      route-rules:
+        - route-id: user-service
+          interval-seconds: 1
+          count: 150
+        - route-id: auth-service
+          interval-seconds: 1
+          count: 50
+        - route-id: admin-service-ai-ops
+          interval-seconds: 1
+          count: 10
+
+spring:
+  cloud:
+    gateway:
+      routes:
+        - id: auth-service
+          uri: lb://shelfflow-auth-service
+          predicates:
+            - Path=/api/admin/auth/**
+        - id: admin-service-products
+          uri: lb://shelfflow-admin-service
+          predicates:
+            - Path=/api/admin/products/**
+        - id: admin-service-batches
+          uri: lb://shelfflow-admin-service
+          predicates:
+            - Path=/api/admin/inventory-batches/**
+        - id: admin-service-orders
+          uri: lb://shelfflow-admin-service
+          predicates:
+            - Path=/api/admin/orders/**
+        - id: admin-service-pickup-points
+          uri: lb://shelfflow-admin-service
+          predicates:
+            - Path=/api/admin/pickup-points/**
+        - id: admin-service-pricing-rules
+          uri: lb://shelfflow-admin-service
+          predicates:
+            - Path=/api/admin/pricing-rules/**
+        - id: admin-service-loss-stats
+          uri: lb://shelfflow-admin-service
+          predicates:
+            - Path=/api/admin/loss-stats/**
+        - id: admin-service-ai-ops
+          uri: lb://shelfflow-admin-service
+          predicates:
+            - Path=/api/admin/ai-ops/**
+        - id: admin-service-operation-logs
+          uri: lb://shelfflow-admin-service
+          predicates:
+            - Path=/api/admin/operation-logs/**
+        - id: user-service
+          uri: lb://shelfflow-user-service
+          predicates:
+            - Path=/api/user/**

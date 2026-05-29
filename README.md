@@ -10,10 +10,10 @@ ShelfFlow/
 │   ├── shelfflow-admin-web/      # 管理端 Web，运营后台、AI 助手、订单履约
 │   └── shelfflow-user-web/       # 用户端 Web，商城首页、购物车、订单、自提信息
 ├── services/
-│   ├── shelfflow-auth-service/   # 管理端认证服务
-│   ├── shelfflow-admin-service/  # 管理端业务服务
-│   ├── shelfflow-user-service/   # 用户端业务服务
-│   ├── shelfflow-gateway/        # API 网关
+│   ├── shelfflow-auth-service/   # 管理端认证服务，支持 Nacos 注册与 Sentinel 限流
+│   ├── shelfflow-admin-service/  # 管理端业务服务，商品、订单、AI 运营
+│   ├── shelfflow-user-service/   # 用户端业务服务，目录、购物车、订单、自提
+│   ├── shelfflow-gateway/        # Spring Cloud Gateway，支持 lb:// 服务发现路由
 │   └── shelfflow-service-common/ # 公共 DTO、安全、异常与通用能力
 ├── packages/                     # 前端共享配置与类型包
 ├── shelfflow-backend/            # legacy 后端与历史迁移 SQL
@@ -40,7 +40,8 @@ ShelfFlow/
 - **业务闭环优先**：管理端维护商品、分类、批次、定价、自提点和订单履约；用户端浏览可售商品、加入购物车、选择自提点、下单支付并查看自提码。
 - **分层清晰**：Java 服务按 controller、service、domain、persistence、mapper 拆分，公共 DTO 与安全能力沉淀到 `shelfflow-service-common`。
 - **前后端契约化**：管理端和用户端通过 Gateway 访问 `/api/admin/**` 与 `/api/user/**`，前端不直接访问数据库。
-- **配置外置**：数据库、JWT、AI 大模型、邮箱验证码、网关地址等均通过环境变量配置，敏感配置不提交到仓库。
+- **配置外置**：数据库、JWT、AI 大模型、邮箱验证码、Nacos、Sentinel、网关地址等均通过环境变量或配置中心管理，敏感配置不提交到仓库。
+- **阿里巴巴组件增强**：通过 Spring Cloud Alibaba 接入 Nacos Discovery/Config 与 Sentinel，支持服务注册发现、集中配置、核心接口限流和 Gateway 路由保护。
 - **可演示也可扩展**：保留最小上线闭环，同时提供 SQL seed、验收清单和面试讲解材料，方便本地演示与后续扩展。
 
 ## 核心模块职责
@@ -50,7 +51,7 @@ ShelfFlow/
 - **Admin Service**：承载运营后台业务，包括商品库存、订单流转、自提核销、AI 建议、操作日志和经营指标。
 - **User Service**：承载用户侧业务，包括账号注册、登录、验证码、商品目录、购物车、下单、支付、自提点查询。
 - **Auth Service**：管理端登录认证和会话签发。
-- **Gateway**：统一入口、路由转发和跨域边界。
+- **Gateway**：统一入口、路由转发、跨域边界、Nacos 服务名路由和 Sentinel 网关保护。
 - **Common**：共享 DTO、权限模型、响应结构、异常处理和安全工具。
 
 ## 环境要求
@@ -61,6 +62,7 @@ ShelfFlow/
 - npm 11+
 - MySQL 8+
 - 可选：Redis、RabbitMQ、Nacos、Docker Desktop
+- 可选：Nacos、Sentinel Dashboard
 
 ## 初始化配置
 
@@ -130,6 +132,43 @@ gateway        http://127.0.0.1:4010
 
 ```bash
 curl -fsS http://127.0.0.1:4010/health
+```
+
+### 可选开启 Nacos + Sentinel
+
+默认本地启动不依赖 Nacos 和 Sentinel。需要演示 Spring Cloud Alibaba 能力时，在 IDEA 的四个 Java 服务环境变量中增加：
+
+先启动阿里巴巴组件：
+
+```bash
+cd /Users/coconut/Desktop/ShelfFlow
+docker compose -f docker-compose.alibaba.yml up -d
+```
+
+访问地址：
+
+```text
+Nacos 控制台：http://127.0.0.1:8848/nacos
+Sentinel 控制台：http://127.0.0.1:8858
+```
+
+再给 Java 服务增加：
+
+```text
+SHELFFLOW_NACOS_ENABLED=true
+SHELFFLOW_NACOS_CONFIG_ENABLED=true
+SHELFFLOW_NACOS_SERVER_ADDR=127.0.0.1:8848
+SHELFFLOW_SENTINEL_ENABLED=true
+SHELFFLOW_SENTINEL_DASHBOARD=127.0.0.1:8858
+SPRING_PROFILES_ACTIVE=nacos
+```
+
+其中 `SPRING_PROFILES_ACTIVE=nacos` 会让 Gateway 使用 `lb://shelfflow-auth-service`、`lb://shelfflow-admin-service`、`lb://shelfflow-user-service` 进行服务发现路由。
+
+Nacos 配置中心样例位于：
+
+```text
+docs/nacos/
 ```
 
 ## 启动前端

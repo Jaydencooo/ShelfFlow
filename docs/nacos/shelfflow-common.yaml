@@ -1,0 +1,27 @@
+app:
+  env: development
+
+shelfflow:
+  runtime:
+    app-env: ${APP_ENV:development}
+    log-level: ${LOG_LEVEL:INFO}
+    api-prefix: /api
+    cors-allowed-origins: http://127.0.0.1:3000,http://127.0.0.1:3001
+  jwt:
+    secret: ${JWT_SECRET:change-me-in-local-env}
+    expires-in: PT12H
+  sentinel:
+    enabled: true
+
+spring:
+  cloud:
+    nacos:
+      discovery:
+        enabled: true
+        server-addr: 127.0.0.1:8848
+        group: DEFAULT_GROUP
+    sentinel:
+      enabled: true
+      eager: true
+      transport:
+        dashboard: 127.0.0.1:8858

@@ -36,6 +36,11 @@ ShelfFlow 是一个面向临期库存流转场景的双端系统，我把它按 
 > user-service 负责目录、购物车、订单。  
 > 共享响应、错误码、枚举和鉴权上下文放在 service-common。
 
+如果面试官追问 Spring Cloud Alibaba，可以补：
+
+> 我接入了 Nacos Discovery 和 Config，默认本地模式仍然可以用固定地址启动；开启 `nacos` profile 后，Gateway 会切换到 `lb://服务名` 路由。  
+> Sentinel 也做成可配置开关，网关按 routeId 限流，服务侧按核心接口资源限流，重点保护登录、验证码、下单、商品目录和 AI 问答这类高风险入口。
+
 可以补一句：
 
 > 我没有一开始就把 inventory、pricing、order、fulfillment 全部拆成独立服务，因为第一阶段更重要的是先把业务边界、状态流转和库存一致性做稳。
@@ -145,7 +150,6 @@ to_prepare -> cancelled
 推荐讲法：
 
 > 我没有只停留在 compile 通过。  
-> 我没有只停留在 compile 通过。  
 > 我把后端测试做到 H2 数据库级 integration test，并通过管理端、用户端前端构建保证基础交付质量。
 
 ## 10. 为什么保留 legacy backend
@@ -171,6 +175,8 @@ to_prepare -> cancelled
 - 有订单审计事件流
 - 有统一错误码和响应结构
 - 有鉴权上下文
+- 有 Nacos 注册发现 / 配置中心接入
+- 有 Sentinel 网关和服务接口限流保护
 - 有数据库级集成测试
 - 有 Java integration test 和前端 build 验证
 

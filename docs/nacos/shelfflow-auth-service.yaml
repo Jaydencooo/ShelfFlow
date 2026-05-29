@@ -1,0 +1,6 @@
+shelfflow:
+  sentinel:
+    flow-rules:
+      - resource: /api/admin/auth/login
+        grade: qps
+        count: 20

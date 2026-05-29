@@ -1,0 +1,26 @@
+shelfflow:
+  admin:
+    loss-stats:
+      expiring-soon-days: 3
+      suggestion-limit: 8
+      estimated-cost-rate: 0.65
+      operating-expense-amount: 0
+    ai-ops:
+      provider: ${AI_OPS_PROVIDER:local}
+      model: ${AI_OPS_MODEL:shelfflow-rules-v1}
+      suggestion-limit: 20
+      retrieval-limit: 4
+  sentinel:
+    flow-rules:
+      - resource: /api/admin/products
+        grade: qps
+        count: 80
+      - resource: /api/admin/inventory-batches
+        grade: qps
+        count: 60
+      - resource: /api/admin/orders
+        grade: qps
+        count: 60
+      - resource: /api/admin/ai-ops/chat
+        grade: qps
+        count: 5

@@ -20,6 +20,8 @@ flowchart LR
     Admin["shelfflow-admin-service"]
     User["shelfflow-user-service"]
     Legacy["shelfflow-backend (legacy)"]
+    Nacos["Nacos Discovery / Config"]
+    Sentinel["Sentinel Dashboard"]
     MySQL[("MySQL")]
     Redis[("Redis")]
 
@@ -29,6 +31,15 @@ flowchart LR
     Gateway --> Auth
     Gateway --> Admin
     Gateway --> User
+
+    Gateway -. register / discover .-> Nacos
+    Auth -. register / config .-> Nacos
+    Admin -. register / config .-> Nacos
+    User -. register / config .-> Nacos
+
+    Gateway -. route flow control .-> Sentinel
+    Admin -. api flow control .-> Sentinel
+    User -. api flow control .-> Sentinel
 
     Auth --> Legacy
     Admin --> MySQL
@@ -69,6 +80,9 @@ ShelfFlow
 - 路由到 auth/admin/user 三个业务服务
 - 统一跨域策略
 - 统一请求入口
+- 默认使用固定 URL 方便本地开发
+- 开启 `nacos` profile 后使用 `lb://服务名` 基于 Nacos 注册发现路由
+- 接入 Sentinel Gateway 规则，对用户端、认证和 AI 等高风险路由做入口保护
 
 ### 4.2 `shelfflow-auth-service`
 
@@ -123,6 +137,33 @@ controller -> application service -> domain policy -> persistence mapper
 - 管理员 / 用户鉴权上下文
 - 全局异常处理
 - MVC 拦截与参数转换
+- Sentinel 通用接口限流规则装配
+
+### 4.7 Spring Cloud Alibaba 接入
+
+Spring Cloud Alibaba 组件按“默认关闭、按需开启”的方式接入，避免本地开发必须依赖完整中间件：
+
+- Nacos Discovery：四个 Java 服务均支持注册到 Nacos。
+- Nacos Config：通过 `bootstrap.yml` 支持读取共享配置 `shelfflow-common.yaml` 和服务级配置。
+- Spring Cloud Gateway LoadBalancer：网关在 `nacos` profile 下使用 `lb://shelfflow-auth-service`、`lb://shelfflow-admin-service`、`lb://shelfflow-user-service` 路由。
+- Sentinel：服务侧维护接口级 QPS 规则，网关侧维护 routeId 级入口规则。
+
+核心开关：
+
+```text
+SHELFFLOW_NACOS_ENABLED=true
+SHELFFLOW_NACOS_CONFIG_ENABLED=true
+SHELFFLOW_SENTINEL_ENABLED=true
+SPRING_PROFILES_ACTIVE=nacos
+```
+
+限流规则不写死在业务代码中，统一通过 `shelfflow.sentinel.*` 和 `shelfflow.gateway.sentinel.*` 配置管理，后续可迁移到 Nacos 配置中心动态维护。
+
+本地演示资源：
+
+- `docker-compose.alibaba.yml`：启动 Nacos 和 Sentinel Dashboard。
+- `docs/nacos/shelfflow-common.yaml`：公共配置样例。
+- `docs/nacos/shelfflow-*.yaml`：服务级配置样例。
 
 ### 4.6 `shelfflow-backend`
 

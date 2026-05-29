@@ -9,6 +9,13 @@ spring:
       discovery:
         enabled: ${SHELFFLOW_NACOS_ENABLED:false}
         server-addr: ${SHELFFLOW_NACOS_SERVER_ADDR:127.0.0.1:8848}
+        namespace: ${SHELFFLOW_NACOS_NAMESPACE:}
+        group: ${SHELFFLOW_NACOS_GROUP:DEFAULT_GROUP}
+    sentinel:
+      enabled: ${SHELFFLOW_SENTINEL_ENABLED:false}
+      eager: ${SHELFFLOW_SENTINEL_EAGER:true}
+      transport:
+        dashboard: ${SHELFFLOW_SENTINEL_DASHBOARD:}
 
 shelfflow:
   runtime:
@@ -22,6 +29,12 @@ shelfflow:
     expires-in: ${JWT_EXPIRES_IN:PT12H}
   legacy:
     base-url: ${SHELFFLOW_LEGACY_BACKEND_BASE_URL:http://127.0.0.1:8082}
+  sentinel:
+    enabled: ${SHELFFLOW_SENTINEL_ENABLED:false}
+    flow-rules:
+      - resource: /api/admin/auth/login
+        grade: qps
+        count: ${SHELFFLOW_SENTINEL_AUTH_LOGIN_QPS:20}
 
 management:
   endpoints:

@@ -31,6 +31,13 @@ spring:
       discovery:
         enabled: ${SHELFFLOW_NACOS_ENABLED:false}
         server-addr: ${SHELFFLOW_NACOS_SERVER_ADDR:127.0.0.1:8848}
+        namespace: ${SHELFFLOW_NACOS_NAMESPACE:}
+        group: ${SHELFFLOW_NACOS_GROUP:DEFAULT_GROUP}
+    sentinel:
+      enabled: ${SHELFFLOW_SENTINEL_ENABLED:false}
+      eager: ${SHELFFLOW_SENTINEL_EAGER:true}
+      transport:
+        dashboard: ${SHELFFLOW_SENTINEL_DASHBOARD:}
 
 mybatis:
   mapper-locations: classpath:/mapper/*.xml
@@ -74,6 +81,21 @@ shelfflow:
       default-package-strategy: ${USER_ORDER_DEFAULT_PACKAGE_STRATEGY:1}
       default-fulfillment-fee: ${USER_ORDER_DEFAULT_FULFILLMENT_FEE:0}
       default-package-count: ${USER_ORDER_DEFAULT_PACKAGE_COUNT:0}
+  sentinel:
+    enabled: ${SHELFFLOW_SENTINEL_ENABLED:false}
+    flow-rules:
+      - resource: /api/user/catalog/products
+        grade: qps
+        count: ${SHELFFLOW_SENTINEL_USER_CATALOG_QPS:120}
+      - resource: /api/user/cart/items
+        grade: qps
+        count: ${SHELFFLOW_SENTINEL_USER_CART_QPS:80}
+      - resource: /api/user/orders
+        grade: qps
+        count: ${SHELFFLOW_SENTINEL_USER_ORDERS_QPS:40}
+      - resource: /api/user/auth/verification-code
+        grade: qps
+        count: ${SHELFFLOW_SENTINEL_USER_VERIFY_CODE_QPS:10}
 
 management:
   endpoints:

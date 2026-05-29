@@ -1,0 +1,23 @@
+shelfflow:
+  user:
+    auth:
+      verification-code-length: 6
+      verification-code-ttl-seconds: 300
+      expose-debug-verification-code: false
+    order:
+      pickup-code-length: 6
+      pickup-deadline-hours: 24
+  sentinel:
+    flow-rules:
+      - resource: /api/user/catalog/products
+        grade: qps
+        count: 120
+      - resource: /api/user/cart/items
+        grade: qps
+        count: 80
+      - resource: /api/user/orders
+        grade: qps
+        count: 40
+      - resource: /api/user/auth/verification-code
+        grade: qps
+        count: 10

@@ -14,6 +14,13 @@ spring:
       discovery:
         enabled: ${SHELFFLOW_NACOS_ENABLED:false}
         server-addr: ${SHELFFLOW_NACOS_SERVER_ADDR:127.0.0.1:8848}
+        namespace: ${SHELFFLOW_NACOS_NAMESPACE:}
+        group: ${SHELFFLOW_NACOS_GROUP:DEFAULT_GROUP}
+    sentinel:
+      enabled: ${SHELFFLOW_SENTINEL_ENABLED:false}
+      eager: ${SHELFFLOW_SENTINEL_EAGER:true}
+      transport:
+        dashboard: ${SHELFFLOW_SENTINEL_DASHBOARD:}
 
 mybatis:
   mapper-locations: classpath:/mapper/*.xml
@@ -49,6 +56,21 @@ shelfflow:
       temperature: ${AI_OPS_TEMPERATURE:0.2}
       suggestion-limit: ${AI_OPS_SUGGESTION_LIMIT:20}
       retrieval-limit: ${AI_OPS_RETRIEVAL_LIMIT:4}
+  sentinel:
+    enabled: ${SHELFFLOW_SENTINEL_ENABLED:false}
+    flow-rules:
+      - resource: /api/admin/products
+        grade: qps
+        count: ${SHELFFLOW_SENTINEL_ADMIN_PRODUCTS_QPS:80}
+      - resource: /api/admin/inventory-batches
+        grade: qps
+        count: ${SHELFFLOW_SENTINEL_ADMIN_BATCHES_QPS:60}
+      - resource: /api/admin/orders
+        grade: qps
+        count: ${SHELFFLOW_SENTINEL_ADMIN_ORDERS_QPS:60}
+      - resource: /api/admin/ai-ops/chat
+        grade: qps
+        count: ${SHELFFLOW_SENTINEL_ADMIN_AI_CHAT_QPS:5}
 
 management:
   endpoints:

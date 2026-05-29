@@ -155,6 +155,78 @@ curl -fsS http://127.0.0.1:4010/health
 | `shelfflow-user-service` | `4013` |
 | `shelfflow-gateway` | `4010` |
 
+### 6.1 可选：开启 Nacos 注册发现和配置中心
+
+默认本地模式不强制依赖 Nacos。需要演示 Spring Cloud Alibaba 能力时，先启动 Nacos，再给四个 Java 服务增加环境变量：
+
+```bash
+docker compose -f docker-compose.alibaba.yml up -d nacos sentinel-dashboard
+```
+
+控制台地址：
+
+```text
+Nacos:    http://127.0.0.1:8848/nacos
+Sentinel: http://127.0.0.1:8858
+```
+
+```bash
+SHELFFLOW_NACOS_ENABLED=true
+SHELFFLOW_NACOS_CONFIG_ENABLED=true
+SHELFFLOW_NACOS_SERVER_ADDR=127.0.0.1:8848
+SPRING_PROFILES_ACTIVE=nacos
+```
+
+说明：
+
+- `SHELFFLOW_NACOS_ENABLED=true`：服务注册到 Nacos。
+- `SHELFFLOW_NACOS_CONFIG_ENABLED=true`：从 Nacos 读取配置。
+- `SPRING_PROFILES_ACTIVE=nacos`：网关使用 `lb://服务名` 路由，不再依赖固定 IP 端口。
+- Nacos 可维护 `shelfflow-common.yaml` 作为公共配置，也可分别维护 `shelfflow-auth-service.yaml`、`shelfflow-admin-service.yaml`、`shelfflow-user-service.yaml`、`shelfflow-gateway.yaml`。
+
+配置中心样例文件已放在：
+
+```text
+/Users/coconut/Desktop/ShelfFlow/docs/nacos/
+```
+
+导入建议：
+
+1. 在 Nacos 控制台进入“配置管理”。
+2. 按文件名创建 Data ID，例如 `shelfflow-common.yaml`。
+3. Group 使用 `DEFAULT_GROUP`。
+4. 配置格式选择 `YAML`。
+5. 将 `docs/nacos/*.yaml` 内容复制进去。
+
+### 6.2 可选：开启 Sentinel 限流保护
+
+需要演示限流、熔断和网关保护时，启动 Sentinel Dashboard 后给 Java 服务增加：
+
+```bash
+SHELFFLOW_SENTINEL_ENABLED=true
+SHELFFLOW_SENTINEL_DASHBOARD=127.0.0.1:8858
+```
+
+项目内置了可配置限流规则：
+
+- Gateway：用户端路由、管理端认证路由、AI 运营助手路由。
+- 用户端服务：商品目录、购物车、订单、验证码接口。
+- 管理端服务：商品、批次、订单、AI 问答接口。
+- 认证服务：管理端登录接口。
+
+限流阈值通过 `.env.local` 或 Nacos 配置中心调整，例如：
+
+```bash
+SHELFFLOW_SENTINEL_USER_ORDERS_QPS=40
+SHELFFLOW_SENTINEL_ADMIN_AI_CHAT_QPS=5
+```
+
+关闭阿里巴巴组件：
+
+```bash
+docker compose -f docker-compose.alibaba.yml down
+```
+
 ## 7. 启动管理端
 
 ```bash

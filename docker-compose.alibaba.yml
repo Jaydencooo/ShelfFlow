@@ -1,0 +1,32 @@
+services:
+  nacos:
+    image: nacos/nacos-server:v2.4.3
+    container_name: shelfflow-nacos
+    restart: unless-stopped
+    environment:
+      MODE: standalone
+      PREFER_HOST_MODE: hostname
+      NACOS_AUTH_ENABLE: "false"
+      TZ: ${SHELFFLOW_INFRA_TZ:-Asia/Shanghai}
+    ports:
+      - "${NACOS_HTTP_PORT:-8848}:8848"
+      - "${NACOS_GRPC_PORT:-9848}:9848"
+      - "${NACOS_RAFT_PORT:-9849}:9849"
+    volumes:
+      - shelfflow_nacos:/home/nacos/data
+
+  sentinel-dashboard:
+    image: bladex/sentinel-dashboard:1.8.8
+    container_name: shelfflow-sentinel-dashboard
+    restart: unless-stopped
+    environment:
+      JAVA_OPTS: >-
+        -Dserver.port=8858
+        -Dcsp.sentinel.dashboard.server=127.0.0.1:8858
+        -Dproject.name=shelfflow-sentinel-dashboard
+      TZ: ${SHELFFLOW_INFRA_TZ:-Asia/Shanghai}
+    ports:
+      - "${SENTINEL_DASHBOARD_PORT:-8858}:8858"
+
+volumes:
+  shelfflow_nacos:
