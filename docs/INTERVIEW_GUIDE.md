@@ -41,6 +41,11 @@ ShelfFlow 是一个面向临期库存流转场景的双端系统，我把它按 
 > 我接入了 Nacos Discovery 和 Config，默认本地模式仍然可以用固定地址启动；开启 `nacos` profile 后，Gateway 会切换到 `lb://服务名` 路由。  
 > Sentinel 也做成可配置开关，网关按 routeId 限流，服务侧按核心接口资源限流，重点保护登录、验证码、下单、商品目录和 AI 问答这类高风险入口。
 
+数据库迁移可以这样补：
+
+> 我没有让 admin-service 和 user-service 各自启动时抢着建表，而是单独拆了 migration-service，用 Flyway 管理表结构版本。  
+> 新环境先跑 migration-service，再启动业务服务；旧库通过 baseline-on-migrate 接入 Flyway 体系，后续所有结构变更都沉淀为版本脚本。
+
 可以补一句：
 
 > 我没有一开始就把 inventory、pricing、order、fulfillment 全部拆成独立服务，因为第一阶段更重要的是先把业务边界、状态流转和库存一致性做稳。
@@ -177,6 +182,7 @@ to_prepare -> cancelled
 - 有鉴权上下文
 - 有 Nacos 注册发现 / 配置中心接入
 - 有 Sentinel 网关和服务接口限流保护
+- 有独立 Flyway migration service 管理数据库版本
 - 有数据库级集成测试
 - 有 Java integration test 和前端 build 验证
 

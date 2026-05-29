@@ -19,6 +19,7 @@ flowchart LR
     Auth["shelfflow-auth-service"]
     Admin["shelfflow-admin-service"]
     User["shelfflow-user-service"]
+    Migration["shelfflow-migration-service"]
     Legacy["shelfflow-backend (legacy)"]
     Nacos["Nacos Discovery / Config"]
     Sentinel["Sentinel Dashboard"]
@@ -44,6 +45,7 @@ flowchart LR
     Auth --> Legacy
     Admin --> MySQL
     User --> MySQL
+    Migration --> MySQL
     Legacy --> MySQL
     Legacy --> Redis
 ```
@@ -139,7 +141,17 @@ controller -> application service -> domain policy -> persistence mapper
 - MVC 拦截与参数转换
 - Sentinel 通用接口限流规则装配
 
-### 4.7 Spring Cloud Alibaba 接入
+### 4.7 `shelfflow-migration-service`
+
+负责数据库结构版本化：
+
+- 独立运行，不常驻端口
+- 使用 Flyway 管理 `db/migration` 下的版本脚本
+- 新库先执行基础结构脚本，再执行增量迁移
+- 旧库通过 `baseline-on-migrate` 建立基线，后续执行幂等迁移
+- 业务服务不负责自动抢占式迁移，避免多个服务同时改表
+
+### 4.8 Spring Cloud Alibaba 接入
 
 Spring Cloud Alibaba 组件按“默认关闭、按需开启”的方式接入，避免本地开发必须依赖完整中间件：
 

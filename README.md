@@ -1,57 +1,56 @@
 # ShelfFlow
 
-ShelfFlow 是一个面向社区自提场景的临期特惠零售系统。项目围绕“临期库存、动态定价、社区自提点、用户下单、订单履约、经营分析、AI 运营助手”形成管理端与用户端闭环，目标是作为 Java 后端面试项目展示企业级分层、微服务拆分、前后端联调和业务建模能力。
+ShelfFlow 是一个面向社区自提场景的临期特惠零售系统。项目围绕“临期库存、动态定价、社区自提点、用户下单、订单履约、经营分析、AI 运营助手”形成管理端与用户端闭环，目标是作为 Java 后端面试项目展示企业级分层、微服务拆分、前后端联调、数据库版本化和业务建模能力。
 
 ## 项目结构
 
 ```text
 ShelfFlow/
 ├── apps/
-│   ├── shelfflow-admin-web/      # 管理端 Web，运营后台、AI 助手、订单履约
-│   └── shelfflow-user-web/       # 用户端 Web，商城首页、购物车、订单、自提信息
+│   ├── shelfflow-admin-web/          # 管理端 Web，运营后台、AI 助手、订单履约
+│   └── shelfflow-user-web/           # 用户端 Web，商城首页、购物车、订单、自提信息
 ├── services/
-│   ├── shelfflow-auth-service/   # 管理端认证服务，支持 Nacos 注册与 Sentinel 限流
-│   ├── shelfflow-admin-service/  # 管理端业务服务，商品、订单、AI 运营
-│   ├── shelfflow-user-service/   # 用户端业务服务，目录、购物车、订单、自提
-│   ├── shelfflow-gateway/        # Spring Cloud Gateway，支持 lb:// 服务发现路由
-│   └── shelfflow-service-common/ # 公共 DTO、安全、异常与通用能力
-├── packages/                     # 前端共享配置与类型包
-├── shelfflow-backend/            # legacy 后端与历史迁移 SQL
+│   ├── shelfflow-auth-service/       # 管理端认证服务
+│   ├── shelfflow-admin-service/      # 管理端业务服务
+│   ├── shelfflow-user-service/       # 用户端业务服务
+│   ├── shelfflow-gateway/            # Spring Cloud Gateway
+│   ├── shelfflow-migration-service/  # Flyway 数据库迁移服务
+│   └── shelfflow-service-common/     # 公共 DTO、安全、异常与通用能力
+├── packages/                         # 前端共享配置与类型包
 ├── docs/
-│   ├── seed/                     # 初始化与演示数据 SQL
-│   ├── ACCEPTANCE_CHECKLIST.md   # 验收清单
-│   ├── API_CONTRACT.md           # API 契约
-│   ├── ARCHITECTURE.md           # 架构说明
-│   ├── INTERVIEW_GUIDE.md        # 面试讲解材料
-│   └── LOCAL_RUNBOOK.md          # 本地运行手册
-├── scripts/
-│   ├── start-admin-web.sh        # 启动管理端
-│   ├── start-user-web.sh         # 启动用户端
-│   └── start-web.sh              # 同时启动管理端和用户端
-├── docker-compose.yml
-├── package.json
-├── services/pom.xml
+│   ├── nacos/                        # Nacos 配置中心样例
+│   ├── seed/                         # 演示数据 SQL
+│   ├── ACCEPTANCE_CHECKLIST.md       # 验收清单
+│   ├── API_CONTRACT.md               # API 契约
+│   ├── ARCHITECTURE.md               # 架构说明
+│   ├── INTERVIEW_GUIDE.md            # 面试讲解材料
+│   └── LOCAL_RUNBOOK.md              # 本地运行手册
+├── scripts/                          # 本地前端启动脚本
+├── docker-compose.yml                # MySQL / Redis / RabbitMQ
+├── docker-compose.alibaba.yml        # Nacos / Sentinel Dashboard
 ├── .env.example
-└── README.md
+├── package.json
+└── services/pom.xml
 ```
 
 ## 设计思路
 
-- **业务闭环优先**：管理端维护商品、分类、批次、定价、自提点和订单履约；用户端浏览可售商品、加入购物车、选择自提点、下单支付并查看自提码。
-- **分层清晰**：Java 服务按 controller、service、domain、persistence、mapper 拆分，公共 DTO 与安全能力沉淀到 `shelfflow-service-common`。
-- **前后端契约化**：管理端和用户端通过 Gateway 访问 `/api/admin/**` 与 `/api/user/**`，前端不直接访问数据库。
-- **配置外置**：数据库、JWT、AI 大模型、邮箱验证码、Nacos、Sentinel、网关地址等均通过环境变量或配置中心管理，敏感配置不提交到仓库。
-- **阿里巴巴组件增强**：通过 Spring Cloud Alibaba 接入 Nacos Discovery/Config 与 Sentinel，支持服务注册发现、集中配置、核心接口限流和 Gateway 路由保护。
-- **可演示也可扩展**：保留最小上线闭环，同时提供 SQL seed、验收清单和面试讲解材料，方便本地演示与后续扩展。
+- **业务闭环优先**：管理端维护商品、分类、批次、定价、自提点和订单履约；用户端浏览商品、加入购物车、选择自提点、下单支付并查看自提码。
+- **微服务边界清晰**：按 gateway、auth、admin、user、migration、common 拆分，避免业务能力散落在前端或脚本中。
+- **分层清晰**：Java 服务按 controller、application service、domain policy、persistence mapper 组织。
+- **配置外置**：数据库、JWT、AI 大模型、邮箱、Nacos、Sentinel、Flyway 均通过环境变量或配置中心管理。
+- **阿里巴巴组件增强**：接入 Nacos Discovery/Config 与 Sentinel，支持服务注册发现、集中配置、接口限流和 Gateway 路由保护。
+- **数据库版本化**：独立 Flyway migration service 管理表结构版本，业务服务不抢占式建表。
 
 ## 核心模块职责
 
-- **管理端 Web**：商品/分类/批次管理、定价规则、自提点、订单履约、经营分析、操作日志、AI 运营助手。
-- **用户端 Web**：商城首页、商品筛选、购物车、注册登录、验证码、找回密码、个人资料、自提信息、订单列表与详情。
-- **Admin Service**：承载运营后台业务，包括商品库存、订单流转、自提核销、AI 建议、操作日志和经营指标。
-- **User Service**：承载用户侧业务，包括账号注册、登录、验证码、商品目录、购物车、下单、支付、自提点查询。
+- **Admin Web**：商品/分类/批次管理、定价规则、自提点、订单履约、经营分析、操作日志、AI 运营助手。
+- **User Web**：商城首页、商品筛选、购物车、注册登录、验证码、个人资料、自提信息、订单列表与详情。
 - **Auth Service**：管理端登录认证和会话签发。
+- **Admin Service**：运营后台业务，包括商品库存、订单流转、自提核销、AI 建议、操作日志和经营指标。
+- **User Service**：用户侧业务，包括账号注册、登录、验证码、商品目录、购物车、下单、支付、自提点查询。
 - **Gateway**：统一入口、路由转发、跨域边界、Nacos 服务名路由和 Sentinel 网关保护。
+- **Migration Service**：执行 Flyway 数据库迁移，沉淀基础结构和增量变更。
 - **Common**：共享 DTO、权限模型、响应结构、异常处理和安全工具。
 
 ## 环境要求
@@ -61,8 +60,7 @@ ShelfFlow/
 - Node.js 24+
 - npm 11+
 - MySQL 8+
-- 可选：Redis、RabbitMQ、Nacos、Docker Desktop
-- 可选：Nacos、Sentinel Dashboard
+- 可选：Redis、RabbitMQ、Nacos、Sentinel Dashboard、Docker Desktop
 
 ## 初始化配置
 
@@ -86,11 +84,11 @@ SHELFFLOW_MAIL_USERNAME=你的邮箱账号
 SHELFFLOW_MAIL_PASSWORD=你的邮箱 SMTP 授权码
 ```
 
-> `.env.local` 已被 `.gitignore` 忽略，不要提交真实密码、SMTP 授权码或大模型 Key。
+`.env.local` 已被 `.gitignore` 忽略，不要提交真实密码、SMTP 授权码或大模型 Key。
 
 ## 数据库
 
-推荐先创建数据库，再导入演示数据：
+创建数据库：
 
 ```sql
 CREATE DATABASE IF NOT EXISTS shelfflow
@@ -98,21 +96,35 @@ CREATE DATABASE IF NOT EXISTS shelfflow
   COLLATE utf8mb4_unicode_ci;
 ```
 
-常用 SQL 位于：
+执行 Flyway 迁移：
+
+```bash
+cd /Users/coconut/Desktop/ShelfFlow/services
+mvn -q -pl shelfflow-migration-service spring-boot:run
+```
+
+迁移脚本位于：
+
+```text
+services/shelfflow-migration-service/src/main/resources/db/migration/
+```
+
+演示数据位于：
 
 ```text
 docs/seed/shelfflow-demo-data.sql
 docs/seed/20260527_user_storefront_products.sql
 docs/seed/20260527_fix_storefront_catalog_visibility.sql
 docs/seed/20260527_fix_user_qa_password.sql
-shelfflow-backend/docs/migrations/
 ```
 
-如果你已经从 Navicat 导出了完整数据库，可优先使用 `docs/seed/shelfflow.sql` 作为本地全量恢复文件。
+如果你已经从 Navicat 导出了完整数据库，可使用 `docs/seed/shelfflow.sql` 作为本地全量恢复文件。
 
 ## 启动后端
 
-在 IDEA 中打开 `/Users/coconut/Desktop/ShelfFlow/services/pom.xml` 作为 Maven 工程，按顺序启动：
+在 IDEA 中打开 `/Users/coconut/Desktop/ShelfFlow/services/pom.xml` 作为 Maven 工程。第一次启动业务服务前，先运行 `ShelfFlowMigrationServiceApplication` 或 Maven 迁移命令。
+
+然后按顺序启动：
 
 1. `ShelfFlowAuthServiceApplication`
 2. `ShelfFlowAdminServiceApplication`
@@ -134,11 +146,9 @@ gateway        http://127.0.0.1:4010
 curl -fsS http://127.0.0.1:4010/health
 ```
 
-### 可选开启 Nacos + Sentinel
+## 可选开启 Nacos + Sentinel
 
-默认本地启动不依赖 Nacos 和 Sentinel。需要演示 Spring Cloud Alibaba 能力时，在 IDEA 的四个 Java 服务环境变量中增加：
-
-先启动阿里巴巴组件：
+默认本地启动不依赖 Nacos 和 Sentinel。需要演示 Spring Cloud Alibaba 能力时，先启动阿里巴巴组件：
 
 ```bash
 cd /Users/coconut/Desktop/ShelfFlow
@@ -152,7 +162,7 @@ Nacos 控制台：http://127.0.0.1:8848/nacos
 Sentinel 控制台：http://127.0.0.1:8858
 ```
 
-再给 Java 服务增加：
+给四个 Java 服务增加环境变量：
 
 ```text
 SHELFFLOW_NACOS_ENABLED=true
