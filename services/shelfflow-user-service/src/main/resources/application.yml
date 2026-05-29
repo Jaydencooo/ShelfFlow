@@ -27,6 +27,14 @@ spring:
     password: ${REDIS_PASSWORD:}
     database: ${REDIS_DATABASE:1}
     timeout: ${REDIS_TIMEOUT_MS:2000}
+  rabbitmq:
+    host: ${RABBITMQ_HOST:127.0.0.1}
+    port: ${RABBITMQ_PORT:5672}
+    username: ${RABBITMQ_DEFAULT_USER:guest}
+    password: ${RABBITMQ_DEFAULT_PASS:guest}
+    virtual-host: ${RABBITMQ_VIRTUAL_HOST:/}
+    publisher-confirm-type: ${RABBITMQ_PUBLISHER_CONFIRM_TYPE:correlated}
+    publisher-returns: ${RABBITMQ_PUBLISHER_RETURNS:true}
   datasource:
     url: jdbc:mysql://${DB_HOST:127.0.0.1}:${DB_PORT:3306}/${DB_NAME:shelfflow}?useUnicode=true&characterEncoding=UTF-8&serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true
     username: ${DB_USER:root}
@@ -92,6 +100,12 @@ shelfflow:
         redis-key-prefix: ${USER_ORDER_INVENTORY_REDIS_KEY_PREFIX:shelfflow:inventory:batch}
         reservation-ttl-seconds: ${USER_ORDER_INVENTORY_RESERVATION_TTL_SECONDS:900}
         fail-open: ${USER_ORDER_INVENTORY_RESERVATION_FAIL_OPEN:false}
+      events:
+        enabled: ${USER_ORDER_EVENTS_ENABLED:false}
+        exchange: ${USER_ORDER_EVENTS_EXCHANGE:shelfflow.order.events}
+        routing-key-prefix: ${USER_ORDER_EVENTS_ROUTING_KEY_PREFIX:shelfflow.order}
+        durable-exchange: ${USER_ORDER_EVENTS_DURABLE_EXCHANGE:true}
+        fail-fast: ${USER_ORDER_EVENTS_FAIL_FAST:false}
   sentinel:
     enabled: ${SHELFFLOW_SENTINEL_ENABLED:false}
     flow-rules:

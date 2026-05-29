@@ -20,6 +20,8 @@ import com.shelfflow.services.user.auth.persistence.dataobject.UserAccountDataOb
 import com.shelfflow.services.user.cart.persistence.UserCartPersistenceMapper;
 import com.shelfflow.services.user.config.UserOrderProperties;
 import com.shelfflow.services.user.order.domain.UserOrderPolicy;
+import com.shelfflow.services.user.order.messaging.UserOrderEventMessage;
+import com.shelfflow.services.user.order.messaging.UserOrderEventPublisher;
 import com.shelfflow.services.user.order.persistence.UserOrderPersistenceMapper;
 import com.shelfflow.services.user.order.persistence.dataobject.UserOrderCartItemRow;
 import com.shelfflow.services.user.order.persistence.dataobject.UserOrderDataObject;
@@ -58,6 +60,7 @@ public class UserOrderApplicationService {
     private final UserPickupContactPolicy userPickupContactPolicy;
     private final UserOrderProperties userOrderProperties;
     private final UserInventoryReservationService userInventoryReservationService;
+    private final UserOrderEventPublisher userOrderEventPublisher;
 
     public UserOrderApplicationService(UserOrderPersistenceMapper userOrderPersistenceMapper,
                                        UserCartPersistenceMapper userCartPersistenceMapper,
@@ -67,7 +70,8 @@ public class UserOrderApplicationService {
                                        UserOrderPolicy userOrderPolicy,
                                        UserPickupContactPolicy userPickupContactPolicy,
                                        UserOrderProperties userOrderProperties,
-                                       UserInventoryReservationService userInventoryReservationService) {
+                                       UserInventoryReservationService userInventoryReservationService,
+                                       UserOrderEventPublisher userOrderEventPublisher) {
         this.userOrderPersistenceMapper = userOrderPersistenceMapper;
         this.userCartPersistenceMapper = userCartPersistenceMapper;
         this.userAccountPersistenceMapper = userAccountPersistenceMapper;
@@ -77,6 +81,7 @@ public class UserOrderApplicationService {
         this.userPickupContactPolicy = userPickupContactPolicy;
         this.userOrderProperties = userOrderProperties;
         this.userInventoryReservationService = userInventoryReservationService;
+        this.userOrderEventPublisher = userOrderEventPublisher;
     }
 
     @Transactional
@@ -121,7 +126,7 @@ public class UserOrderApplicationService {
         UserOrderDataObject order = buildOrder(authenticatedUser, request, cartItems, user, pickupContact, pickupPoint, now);
         userOrderPersistenceMapper.insertOrder(order);
         userOrderPersistenceMapper.insertOrderDetails(buildOrderDetails(order.getId(), cartItems));
-        userOrderPersistenceMapper.insertOrderEvent(buildOrderEvent(
+        insertAndPublishOrderEvent(buildOrderEvent(
                 order.getId(),
                 OrderEventType.SUBMITTED,
                 OrderEventActorType.USER,
@@ -132,7 +137,7 @@ public class UserOrderApplicationService {
                 UserOrderPayStatus.UNPAID,
                 "用户提交订单",
                 now
-        ));
+        ), order.getNumber(), authenticatedUser.getUserId(), order.getAmount(), userOrderPolicy.calculateItemCount(cartItems));
         if (selectedCartItemIds == null) {
             userCartPersistenceMapper.clearByUserId(authenticatedUser.getUserId());
         } else {
@@ -271,7 +276,7 @@ public class UserOrderApplicationService {
         if (affectedRows <= 0) {
             throw new ApplicationException(com.shelfflow.services.common.api.ErrorCode.CONFLICT, "当前订单状态不允许取消");
         }
-        userOrderPersistenceMapper.insertOrderEvent(buildOrderEvent(
+        insertAndPublishOrderEvent(buildOrderEvent(
                 id,
                 OrderEventType.CANCELLED,
                 OrderEventActorType.USER,
@@ -282,7 +287,7 @@ public class UserOrderApplicationService {
                 UserOrderPayStatus.fromLegacy(row.getPayStatus()),
                 cancelReason,
                 now
-        ));
+        ), row.getNumber(), authenticatedUser.getUserId(), row.getAmount(), items.stream().mapToInt(UserOrderItemRow::getNumber).sum());
     }
 
     @Transactional
@@ -305,7 +310,7 @@ public class UserOrderApplicationService {
         if (affectedRows <= 0) {
             throw new ApplicationException(com.shelfflow.services.common.api.ErrorCode.CONFLICT, "当前订单状态不允许支付");
         }
-        userOrderPersistenceMapper.insertOrderEvent(buildOrderEvent(
+        insertAndPublishOrderEvent(buildOrderEvent(
                 id,
                 OrderEventType.PAID,
                 OrderEventActorType.USER,
@@ -316,8 +321,23 @@ public class UserOrderApplicationService {
                 UserOrderPayStatus.PAID,
                 "用户确认支付",
                 checkoutTime
-        ));
+        ), row.getNumber(), authenticatedUser.getUserId(), row.getAmount(), null);
         return getOrderDetail(authenticatedUser, orderId);
+    }
+
+    private void insertAndPublishOrderEvent(UserOrderEventDataObject event,
+                                            String orderNumber,
+                                            Long userId,
+                                            BigDecimal totalAmount,
+                                            Integer itemCount) {
+        userOrderPersistenceMapper.insertOrderEvent(event);
+        userOrderEventPublisher.publishAfterCommit(UserOrderEventMessage.from(
+                event,
+                orderNumber,
+                userId,
+                totalAmount,
+                itemCount
+        ));
     }
 
     private UserOrderEventDataObject buildOrderEvent(Long orderId,

@@ -18,6 +18,7 @@ public class UserOrderProperties {
     private int defaultFulfillmentFee = 0;
     private int defaultPackageCount = 0;
     private InventoryReservation inventoryReservation = new InventoryReservation();
+    private Events events = new Events();
 
     @Data
     public static class InventoryReservation {
@@ -30,5 +31,14 @@ public class UserOrderProperties {
     public enum InventoryReservationMode {
         DATABASE,
         REDIS_LUA
+    }
+
+    @Data
+    public static class Events {
+        private boolean enabled;
+        private String exchange = "shelfflow.order.events";
+        private String routingKeyPrefix = "shelfflow.order";
+        private boolean durableExchange = true;
+        private boolean failFast;
     }
 }
