@@ -42,6 +42,7 @@ ShelfFlow/
 - **阿里巴巴组件增强**：接入 Nacos Discovery/Config 与 Sentinel，支持服务注册发现、集中配置、接口限流和 Gateway 路由保护。
 - **数据库版本化**：独立 Flyway migration service 管理表结构版本，业务服务不抢占式建表。
 - **库存并发保护**：用户下单支持可选 Redis Lua 原子预占，数据库条件更新仍作为最终一致性防线。
+- **高频目录缓存**：用户端商品目录和分类支持可选 Redis 缓存，管理端商品、批次、定价变更后统一失效，避免前台读取旧数据。
 - **支付幂等模型**：用户支付会生成订单级支付单和幂等键，重复支付请求复用既有支付结果。
 - **事件驱动扩展**：用户订单支持可选 RabbitMQ 领域事件发布，事务提交后异步通知下游履约、分析或消息模块。
 - **订单自动治理**：支持可配置未支付超时关单，自动取消订单、释放库存并沉淀审计事件。
@@ -184,6 +185,20 @@ Nacos 配置中心样例位于：
 ```text
 docs/nacos/
 ```
+
+## 可选开启用户目录缓存
+
+用户端首页和商品目录可以开启 Redis 缓存，适合演示高频读优化。管理端商品、分类、批次、定价规则发生变化时，可以同步清理用户端目录缓存。
+
+```text
+USER_CATALOG_CACHE_ENABLED=true
+ADMIN_STOREFRONT_CACHE_INVALIDATION_ENABLED=true
+STOREFRONT_CATALOG_CACHE_REDIS_KEY_PREFIX=shelfflow:storefront:catalog
+USER_CATALOG_CACHE_CATEGORIES_TTL_SECONDS=120
+USER_CATALOG_CACHE_PRODUCTS_TTL_SECONDS=60
+```
+
+默认不开启，避免本地未启动 Redis 时影响基础启动；开启后 Redis 异常默认 fail-open，主链路仍回落数据库。
 
 ## 启动前端
 

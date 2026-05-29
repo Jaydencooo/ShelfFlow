@@ -1,5 +1,7 @@
 package com.shelfflow.services.admin.pricing.service;
 
+import com.shelfflow.services.admin.cache.NoopStorefrontCatalogCacheInvalidator;
+import com.shelfflow.services.admin.cache.StorefrontCatalogCacheInvalidator;
 import com.shelfflow.services.admin.pricing.domain.AdminPricingRulePolicy;
 import com.shelfflow.services.admin.pricing.persistence.AdminPricingRulePersistenceMapper;
 import com.shelfflow.services.admin.pricing.persistence.dataobject.AdminPricingRuleCriteria;
@@ -13,6 +15,8 @@ import com.shelfflow.services.common.dto.AdminPricingRuleResponse;
 import com.shelfflow.services.common.dto.AdminPricingRuleUpsertRequest;
 import com.shelfflow.services.common.dto.AdminPricingSuggestionResponse;
 import com.shelfflow.services.common.exception.ApplicationException;
+import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -33,11 +37,28 @@ public class AdminPricingRuleApplicationService {
 
     private final AdminPricingRulePersistenceMapper pricingRulePersistenceMapper;
     private final AdminPricingRulePolicy pricingRulePolicy;
+    private final StorefrontCatalogCacheInvalidator storefrontCatalogCacheInvalidator;
 
     public AdminPricingRuleApplicationService(AdminPricingRulePersistenceMapper pricingRulePersistenceMapper,
                                               AdminPricingRulePolicy pricingRulePolicy) {
+        this(pricingRulePersistenceMapper, pricingRulePolicy, NoopStorefrontCatalogCacheInvalidator.INSTANCE);
+    }
+
+    @Autowired
+    public AdminPricingRuleApplicationService(AdminPricingRulePersistenceMapper pricingRulePersistenceMapper,
+                                              AdminPricingRulePolicy pricingRulePolicy,
+                                              ObjectProvider<StorefrontCatalogCacheInvalidator> storefrontCatalogCacheInvalidatorProvider) {
+        this(pricingRulePersistenceMapper,
+                pricingRulePolicy,
+                storefrontCatalogCacheInvalidatorProvider.getIfAvailable(() -> NoopStorefrontCatalogCacheInvalidator.INSTANCE));
+    }
+
+    private AdminPricingRuleApplicationService(AdminPricingRulePersistenceMapper pricingRulePersistenceMapper,
+                                               AdminPricingRulePolicy pricingRulePolicy,
+                                               StorefrontCatalogCacheInvalidator storefrontCatalogCacheInvalidator) {
         this.pricingRulePersistenceMapper = pricingRulePersistenceMapper;
         this.pricingRulePolicy = pricingRulePolicy;
+        this.storefrontCatalogCacheInvalidator = storefrontCatalogCacheInvalidator;
     }
 
     @Transactional(readOnly = true)
@@ -91,6 +112,7 @@ public class AdminPricingRuleApplicationService {
         rule.setCreateUser(actorId);
         rule.setUpdateUser(actorId);
         pricingRulePersistenceMapper.insert(rule);
+        storefrontCatalogCacheInvalidator.invalidateCatalog();
         return toResponse(pricingRulePersistenceMapper.findById(rule.getId()));
     }
 
@@ -117,6 +139,7 @@ public class AdminPricingRuleApplicationService {
         rule.setUpdateTime(LocalDateTime.now());
         rule.setUpdateUser(actorId);
         pricingRulePersistenceMapper.update(rule);
+        storefrontCatalogCacheInvalidator.invalidateCatalog();
         return toResponse(pricingRulePersistenceMapper.findById(ruleId));
     }
 
@@ -127,6 +150,7 @@ public class AdminPricingRuleApplicationService {
             throw new ApplicationException(ErrorCode.NOT_FOUND, "定价规则不存在");
         }
         pricingRulePersistenceMapper.updateStatus(ruleId, resolveStatus(status).legacyValue(), actorId);
+        storefrontCatalogCacheInvalidator.invalidateCatalog();
         return toResponse(pricingRulePersistenceMapper.findById(ruleId));
     }
 
@@ -137,6 +161,7 @@ public class AdminPricingRuleApplicationService {
             throw new ApplicationException(ErrorCode.NOT_FOUND, "定价规则不存在");
         }
         pricingRulePersistenceMapper.deleteById(ruleId);
+        storefrontCatalogCacheInvalidator.invalidateCatalog();
     }
 
     @Transactional(readOnly = true)

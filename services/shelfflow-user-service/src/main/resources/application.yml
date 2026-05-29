@@ -84,6 +84,13 @@ shelfflow:
         from: ${SHELFFLOW_MAIL_FROM:${SHELFFLOW_MAIL_USERNAME:}}
         from-name: ${SHELFFLOW_MAIL_FROM_NAME:ShelfFlow}
         subject: ${SHELFFLOW_MAIL_SUBJECT:ShelfFlow 验证码}
+    catalog:
+      cache:
+        enabled: ${USER_CATALOG_CACHE_ENABLED:false}
+        redis-key-prefix: ${STOREFRONT_CATALOG_CACHE_REDIS_KEY_PREFIX:shelfflow:storefront:catalog}
+        categories-ttl-seconds: ${USER_CATALOG_CACHE_CATEGORIES_TTL_SECONDS:120}
+        products-ttl-seconds: ${USER_CATALOG_CACHE_PRODUCTS_TTL_SECONDS:60}
+        fail-open: ${USER_CATALOG_CACHE_FAIL_OPEN:true}
     order:
       pickup-point: ${USER_ORDER_PICKUP_POINT:滨江社区前置仓 A 区}
       order-number-prefix: ${USER_ORDER_NUMBER_PREFIX:SFU}

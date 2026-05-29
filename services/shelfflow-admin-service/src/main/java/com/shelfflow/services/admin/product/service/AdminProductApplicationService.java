@@ -1,5 +1,7 @@
 package com.shelfflow.services.admin.product.service;
 
+import com.shelfflow.services.admin.cache.NoopStorefrontCatalogCacheInvalidator;
+import com.shelfflow.services.admin.cache.StorefrontCatalogCacheInvalidator;
 import com.shelfflow.services.admin.product.domain.ProductCatalogPolicy;
 import com.shelfflow.services.admin.product.persistence.dataobject.ProductCategoryDataObject;
 import com.shelfflow.services.admin.product.persistence.ProductPersistenceMapper;
@@ -15,6 +17,8 @@ import com.shelfflow.services.common.dto.ProductQuery;
 import com.shelfflow.services.common.dto.ProductRecordResponse;
 import com.shelfflow.services.common.dto.ProductUpsertRequest;
 import com.shelfflow.services.common.exception.ApplicationException;
+import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -36,11 +40,28 @@ public class AdminProductApplicationService {
 
     private final ProductPersistenceMapper productPersistenceMapper;
     private final ProductCatalogPolicy productCatalogPolicy;
+    private final StorefrontCatalogCacheInvalidator storefrontCatalogCacheInvalidator;
 
     public AdminProductApplicationService(ProductPersistenceMapper productPersistenceMapper,
                                           ProductCatalogPolicy productCatalogPolicy) {
+        this(productPersistenceMapper, productCatalogPolicy, NoopStorefrontCatalogCacheInvalidator.INSTANCE);
+    }
+
+    @Autowired
+    public AdminProductApplicationService(ProductPersistenceMapper productPersistenceMapper,
+                                          ProductCatalogPolicy productCatalogPolicy,
+                                          ObjectProvider<StorefrontCatalogCacheInvalidator> storefrontCatalogCacheInvalidatorProvider) {
+        this(productPersistenceMapper,
+                productCatalogPolicy,
+                storefrontCatalogCacheInvalidatorProvider.getIfAvailable(() -> NoopStorefrontCatalogCacheInvalidator.INSTANCE));
+    }
+
+    private AdminProductApplicationService(ProductPersistenceMapper productPersistenceMapper,
+                                           ProductCatalogPolicy productCatalogPolicy,
+                                           StorefrontCatalogCacheInvalidator storefrontCatalogCacheInvalidator) {
         this.productPersistenceMapper = productPersistenceMapper;
         this.productCatalogPolicy = productCatalogPolicy;
+        this.storefrontCatalogCacheInvalidator = storefrontCatalogCacheInvalidator;
     }
 
     @Transactional(readOnly = true)
@@ -95,6 +116,7 @@ public class AdminProductApplicationService {
         category.setCreateUser(actorId);
         category.setUpdateUser(actorId);
         productPersistenceMapper.insertCategory(category);
+        storefrontCatalogCacheInvalidator.invalidateCatalog();
 
         ProductCategoryDataObject created = productPersistenceMapper.findCategoryById(category.getId());
         return AdminProductCategoryResponse.builder()
@@ -126,6 +148,7 @@ public class AdminProductApplicationService {
         product.setCreateUser(actorId);
         product.setUpdateUser(actorId);
         productPersistenceMapper.insert(product);
+        storefrontCatalogCacheInvalidator.invalidateCatalog();
     }
 
     @Transactional
@@ -157,6 +180,7 @@ public class AdminProductApplicationService {
         if (writableStatus == ProductStatus.INACTIVE) {
             productPersistenceMapper.pauseActiveBatchesByProduct(productId, actorId);
         }
+        storefrontCatalogCacheInvalidator.invalidateCatalog();
     }
 
     @Transactional
@@ -169,6 +193,7 @@ public class AdminProductApplicationService {
 
         productPersistenceMapper.pauseActiveBatchesByProduct(productId, actorId);
         productPersistenceMapper.logicallyDeleteProduct(productId, DELETED_PRODUCT_STATUS, actorId);
+        storefrontCatalogCacheInvalidator.invalidateCatalog();
     }
 
     @Transactional
@@ -181,6 +206,7 @@ public class AdminProductApplicationService {
 
         productCatalogPolicy.ensureCategoryCanBeDeleted(productPersistenceMapper.countProductsByCategory(categoryId));
         productPersistenceMapper.disableCategory(categoryId, actorId);
+        storefrontCatalogCacheInvalidator.invalidateCatalog();
     }
 
     private void ensureCategoryExists(Long categoryId) {

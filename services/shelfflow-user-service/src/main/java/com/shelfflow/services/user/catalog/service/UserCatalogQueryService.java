@@ -5,6 +5,9 @@ import com.shelfflow.services.common.dto.UserCatalogCategoryResponse;
 import com.shelfflow.services.common.dto.UserCatalogProductDetailResponse;
 import com.shelfflow.services.common.dto.UserCatalogProductQuery;
 import com.shelfflow.services.common.dto.UserCatalogProductResponse;
+import com.shelfflow.services.user.catalog.cache.NoopUserCatalogCacheOperations;
+import com.shelfflow.services.user.catalog.cache.UserCatalogCacheOperations;
+import com.shelfflow.services.user.catalog.cache.UserCatalogCacheQuery;
 import com.shelfflow.services.user.catalog.domain.UserCatalogPolicy;
 import com.shelfflow.services.user.catalog.persistence.UserCatalogPersistenceMapper;
 import com.shelfflow.services.user.catalog.persistence.dataobject.UserCatalogPricingRuleRow;
@@ -12,6 +15,8 @@ import com.shelfflow.services.user.catalog.persistence.dataobject.UserCatalogPro
 import com.shelfflow.services.user.catalog.persistence.dataobject.UserCatalogProductDetailRow;
 import com.shelfflow.services.user.catalog.persistence.dataobject.UserCatalogProductRow;
 import com.shelfflow.services.user.catalog.support.UserCatalogSpecParser;
+import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
@@ -23,23 +28,47 @@ public class UserCatalogQueryService {
     private final UserCatalogPersistenceMapper userCatalogPersistenceMapper;
     private final UserCatalogPolicy userCatalogPolicy;
     private final UserCatalogSpecParser userCatalogSpecParser;
+    private final UserCatalogCacheOperations userCatalogCacheOperations;
 
     public UserCatalogQueryService(UserCatalogPersistenceMapper userCatalogPersistenceMapper,
                                    UserCatalogPolicy userCatalogPolicy,
                                    UserCatalogSpecParser userCatalogSpecParser) {
+        this(userCatalogPersistenceMapper, userCatalogPolicy, userCatalogSpecParser, NoopUserCatalogCacheOperations.INSTANCE);
+    }
+
+    @Autowired
+    public UserCatalogQueryService(UserCatalogPersistenceMapper userCatalogPersistenceMapper,
+                                   UserCatalogPolicy userCatalogPolicy,
+                                   UserCatalogSpecParser userCatalogSpecParser,
+                                   ObjectProvider<UserCatalogCacheOperations> userCatalogCacheOperationsProvider) {
+        this(userCatalogPersistenceMapper,
+                userCatalogPolicy,
+                userCatalogSpecParser,
+                userCatalogCacheOperationsProvider.getIfAvailable(() -> NoopUserCatalogCacheOperations.INSTANCE));
+    }
+
+    private UserCatalogQueryService(UserCatalogPersistenceMapper userCatalogPersistenceMapper,
+                                    UserCatalogPolicy userCatalogPolicy,
+                                    UserCatalogSpecParser userCatalogSpecParser,
+                                    UserCatalogCacheOperations userCatalogCacheOperations) {
         this.userCatalogPersistenceMapper = userCatalogPersistenceMapper;
         this.userCatalogPolicy = userCatalogPolicy;
         this.userCatalogSpecParser = userCatalogSpecParser;
+        this.userCatalogCacheOperations = userCatalogCacheOperations;
     }
 
     public List<UserCatalogCategoryResponse> listProductCategories() {
-        return userCatalogPersistenceMapper.listActiveCategories(UserCatalogPolicy.PRODUCT_CATEGORY_TYPE).stream()
+        return userCatalogCacheOperations.getCategories().orElseGet(() -> {
+            List<UserCatalogCategoryResponse> categories = userCatalogPersistenceMapper.listActiveCategories(UserCatalogPolicy.PRODUCT_CATEGORY_TYPE).stream()
                 .map(category -> UserCatalogCategoryResponse.builder()
                         .id(String.valueOf(category.getId()))
                         .name(category.getName())
                         .sort(category.getSort())
                         .build())
                 .toList();
+            userCatalogCacheOperations.putCategories(categories);
+            return categories;
+        });
     }
 
     public PageResponse<UserCatalogProductResponse> pageProducts(UserCatalogProductQuery query) {
@@ -52,6 +81,23 @@ public class UserCatalogQueryService {
                 .offset((query.getPage() - 1) * query.getPageSize())
                 .build();
 
+        UserCatalogCacheQuery cacheQuery = UserCatalogCacheQuery.builder()
+                .keyword(criteria.getKeyword())
+                .categoryId(criteria.getCategoryId())
+                .sortColumn(criteria.getSortColumn())
+                .sortDirection(criteria.getSortDirection())
+                .page(query.getPage())
+                .pageSize(query.getPageSize())
+                .build();
+        return userCatalogCacheOperations.getProducts(cacheQuery).orElseGet(() -> {
+            PageResponse<UserCatalogProductResponse> response = pageProductsFromDatabase(query, criteria);
+            userCatalogCacheOperations.putProducts(cacheQuery, response);
+            return response;
+        });
+    }
+
+    private PageResponse<UserCatalogProductResponse> pageProductsFromDatabase(UserCatalogProductQuery query,
+                                                                              UserCatalogProductCriteria criteria) {
         List<UserCatalogPricingRuleRow> pricingRules = userCatalogPersistenceMapper.listEnabledPricingRules();
         List<UserCatalogProductResponse> items = userCatalogPersistenceMapper.pageActiveProducts(criteria).stream()
                 .map(product -> toResponse(product, pricingRules))

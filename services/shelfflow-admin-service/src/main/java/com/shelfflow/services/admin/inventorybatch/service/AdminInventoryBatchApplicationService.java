@@ -1,5 +1,7 @@
 package com.shelfflow.services.admin.inventorybatch.service;
 
+import com.shelfflow.services.admin.cache.NoopStorefrontCatalogCacheInvalidator;
+import com.shelfflow.services.admin.cache.StorefrontCatalogCacheInvalidator;
 import com.shelfflow.services.admin.inventorybatch.domain.BatchInventoryPolicy;
 import com.shelfflow.services.admin.inventorybatch.domain.BatchLifecyclePolicy;
 import com.shelfflow.services.admin.inventorybatch.persistence.InventoryBatchPersistenceMapper;
@@ -14,6 +16,8 @@ import com.shelfflow.services.common.dto.InventoryBatchQuery;
 import com.shelfflow.services.common.dto.InventoryBatchRecordResponse;
 import com.shelfflow.services.common.dto.InventoryBatchUpsertRequest;
 import com.shelfflow.services.common.exception.ApplicationException;
+import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -42,13 +46,33 @@ public class AdminInventoryBatchApplicationService {
     private final InventoryBatchPersistenceMapper inventoryBatchPersistenceMapper;
     private final BatchLifecyclePolicy batchLifecyclePolicy;
     private final BatchInventoryPolicy batchInventoryPolicy;
+    private final StorefrontCatalogCacheInvalidator storefrontCatalogCacheInvalidator;
 
     public AdminInventoryBatchApplicationService(InventoryBatchPersistenceMapper inventoryBatchPersistenceMapper,
                                                  BatchLifecyclePolicy batchLifecyclePolicy,
                                                  BatchInventoryPolicy batchInventoryPolicy) {
+        this(inventoryBatchPersistenceMapper, batchLifecyclePolicy, batchInventoryPolicy, NoopStorefrontCatalogCacheInvalidator.INSTANCE);
+    }
+
+    @Autowired
+    public AdminInventoryBatchApplicationService(InventoryBatchPersistenceMapper inventoryBatchPersistenceMapper,
+                                                 BatchLifecyclePolicy batchLifecyclePolicy,
+                                                 BatchInventoryPolicy batchInventoryPolicy,
+                                                 ObjectProvider<StorefrontCatalogCacheInvalidator> storefrontCatalogCacheInvalidatorProvider) {
+        this(inventoryBatchPersistenceMapper,
+                batchLifecyclePolicy,
+                batchInventoryPolicy,
+                storefrontCatalogCacheInvalidatorProvider.getIfAvailable(() -> NoopStorefrontCatalogCacheInvalidator.INSTANCE));
+    }
+
+    private AdminInventoryBatchApplicationService(InventoryBatchPersistenceMapper inventoryBatchPersistenceMapper,
+                                                  BatchLifecyclePolicy batchLifecyclePolicy,
+                                                  BatchInventoryPolicy batchInventoryPolicy,
+                                                  StorefrontCatalogCacheInvalidator storefrontCatalogCacheInvalidator) {
         this.inventoryBatchPersistenceMapper = inventoryBatchPersistenceMapper;
         this.batchLifecyclePolicy = batchLifecyclePolicy;
         this.batchInventoryPolicy = batchInventoryPolicy;
+        this.storefrontCatalogCacheInvalidator = storefrontCatalogCacheInvalidator;
     }
 
     @Transactional
@@ -117,6 +141,7 @@ public class AdminInventoryBatchApplicationService {
         } catch (DuplicateKeyException exception) {
             throw new ApplicationException(ErrorCode.CONFLICT, "批次号已存在");
         }
+        storefrontCatalogCacheInvalidator.invalidateCatalog();
     }
 
     @Transactional
@@ -149,6 +174,7 @@ public class AdminInventoryBatchApplicationService {
         } catch (DuplicateKeyException exception) {
             throw new ApplicationException(ErrorCode.CONFLICT, "批次号已存在");
         }
+        storefrontCatalogCacheInvalidator.invalidateCatalog();
     }
 
     @Transactional
@@ -163,6 +189,7 @@ public class AdminInventoryBatchApplicationService {
         batchLifecyclePolicy.ensureManualTransitionAllowed(currentStatus, writableTarget);
 
         inventoryBatchPersistenceMapper.updateStatus(id, writableTarget.legacyValue(), actorId, LocalDateTime.now());
+        storefrontCatalogCacheInvalidator.invalidateCatalog();
     }
 
     @Transactional
@@ -175,12 +202,16 @@ public class AdminInventoryBatchApplicationService {
             throw new ApplicationException(ErrorCode.CONFLICT, "批次已有锁定或已售库存，不能删除");
         }
         inventoryBatchPersistenceMapper.deleteById(id);
+        storefrontCatalogCacheInvalidator.invalidateCatalog();
     }
 
     private void refreshStatuses() {
-        inventoryBatchPersistenceMapper.restoreSaleableBatches();
-        inventoryBatchPersistenceMapper.markExpiredBatches();
-        inventoryBatchPersistenceMapper.markSoldOutBatches();
+        int changedRows = inventoryBatchPersistenceMapper.restoreSaleableBatches()
+                + inventoryBatchPersistenceMapper.markExpiredBatches()
+                + inventoryBatchPersistenceMapper.markSoldOutBatches();
+        if (changedRows > 0) {
+            storefrontCatalogCacheInvalidator.invalidateCatalog();
+        }
     }
 
     private InventoryBatchRecordResponse toResponse(InventoryBatchPageRow row) {

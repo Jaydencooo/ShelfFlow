@@ -4,6 +4,12 @@ server:
 spring:
   application:
     name: ${APP_NAME:shelfflow-admin-service}
+  redis:
+    host: ${REDIS_HOST:127.0.0.1}
+    port: ${REDIS_PORT:6379}
+    password: ${REDIS_PASSWORD:}
+    database: ${REDIS_DATABASE:1}
+    timeout: ${REDIS_TIMEOUT_MS:2000}
   datasource:
     url: jdbc:mysql://${DB_HOST:127.0.0.1}:${DB_PORT:3306}/${DB_NAME:shelfflow}?useUnicode=true&characterEncoding=UTF-8&serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true
     username: ${DB_USER:root}
@@ -56,6 +62,11 @@ shelfflow:
       temperature: ${AI_OPS_TEMPERATURE:0.2}
       suggestion-limit: ${AI_OPS_SUGGESTION_LIMIT:20}
       retrieval-limit: ${AI_OPS_RETRIEVAL_LIMIT:4}
+    storefront-cache:
+      invalidation-enabled: ${ADMIN_STOREFRONT_CACHE_INVALIDATION_ENABLED:false}
+      redis-key-prefix: ${STOREFRONT_CATALOG_CACHE_REDIS_KEY_PREFIX:shelfflow:storefront:catalog}
+      scan-count: ${ADMIN_STOREFRONT_CACHE_SCAN_COUNT:200}
+      fail-open: ${ADMIN_STOREFRONT_CACHE_FAIL_OPEN:true}
   sentinel:
     enabled: ${SHELFFLOW_SENTINEL_ENABLED:false}
     flow-rules:
