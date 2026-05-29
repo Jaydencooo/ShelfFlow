@@ -298,6 +298,7 @@ stateDiagram-v2
 1. 提交订单  
    - 校验购物车项可售性
    - 校验可用库存
+   - 可选通过 Redis Lua 做批次库存原子预占
    - 将 `locked_quantity` 增加
    - 写入订单和订单明细
 
@@ -310,6 +311,13 @@ stateDiagram-v2
    - 将 `locked_quantity` 结转到 `sold_quantity`
 
 这套设计的重点是把状态变化和库存变化保持在同一业务语义下，而不是散落在多个脚本或页面逻辑里。
+
+并发库存保护分为两层：
+
+- Redis Lua 预占层：开启 `USER_ORDER_INVENTORY_RESERVATION_MODE=redis_lua` 后，按批次维护短 TTL 的 in-flight 预占计数，避免高并发请求在数据库事务提交前集中穿透。
+- 数据库最终防线：`inventory_batch` 更新仍使用 `stock_quantity - locked_quantity - sold_quantity >= quantity` 条件，保证即使 Redis 不可用或未开启，也不会突破真实库存。
+
+Redis 预占记录只覆盖“正在提交但事务尚未完成”的短窗口；事务完成后释放预占计数，由数据库中的 `locked_quantity` 承接后续状态。
 
 ## 8. 测试与验收
 

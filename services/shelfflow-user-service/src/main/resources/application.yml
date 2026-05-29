@@ -21,6 +21,12 @@ spring:
           connectiontimeout: ${SHELFFLOW_MAIL_CONNECTION_TIMEOUT_MS:10000}
           timeout: ${SHELFFLOW_MAIL_TIMEOUT_MS:10000}
           writetimeout: ${SHELFFLOW_MAIL_WRITE_TIMEOUT_MS:10000}
+  redis:
+    host: ${REDIS_HOST:127.0.0.1}
+    port: ${REDIS_PORT:6379}
+    password: ${REDIS_PASSWORD:}
+    database: ${REDIS_DATABASE:1}
+    timeout: ${REDIS_TIMEOUT_MS:2000}
   datasource:
     url: jdbc:mysql://${DB_HOST:127.0.0.1}:${DB_PORT:3306}/${DB_NAME:shelfflow}?useUnicode=true&characterEncoding=UTF-8&serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true
     username: ${DB_USER:root}
@@ -81,6 +87,11 @@ shelfflow:
       default-package-strategy: ${USER_ORDER_DEFAULT_PACKAGE_STRATEGY:1}
       default-fulfillment-fee: ${USER_ORDER_DEFAULT_FULFILLMENT_FEE:0}
       default-package-count: ${USER_ORDER_DEFAULT_PACKAGE_COUNT:0}
+      inventory-reservation:
+        mode: ${USER_ORDER_INVENTORY_RESERVATION_MODE:database}
+        redis-key-prefix: ${USER_ORDER_INVENTORY_REDIS_KEY_PREFIX:shelfflow:inventory:batch}
+        reservation-ttl-seconds: ${USER_ORDER_INVENTORY_RESERVATION_TTL_SECONDS:900}
+        fail-open: ${USER_ORDER_INVENTORY_RESERVATION_FAIL_OPEN:false}
   sentinel:
     enabled: ${SHELFFLOW_SENTINEL_ENABLED:false}
     flow-rules:

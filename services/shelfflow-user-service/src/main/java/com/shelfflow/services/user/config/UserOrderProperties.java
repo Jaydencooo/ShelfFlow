@@ -17,4 +17,18 @@ public class UserOrderProperties {
     private int defaultPackageStrategy = 1;
     private int defaultFulfillmentFee = 0;
     private int defaultPackageCount = 0;
+    private InventoryReservation inventoryReservation = new InventoryReservation();
+
+    @Data
+    public static class InventoryReservation {
+        private InventoryReservationMode mode = InventoryReservationMode.DATABASE;
+        private String redisKeyPrefix = "shelfflow:inventory:batch";
+        private long reservationTtlSeconds = 900;
+        private boolean failOpen;
+    }
+
+    public enum InventoryReservationMode {
+        DATABASE,
+        REDIS_LUA
+    }
 }

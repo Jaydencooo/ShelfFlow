@@ -36,6 +36,8 @@ import com.shelfflow.services.user.pickuppoint.persistence.UserPickupPointPersis
 import com.shelfflow.services.user.pickuppoint.persistence.dataobject.UserPickupPointDataObject;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
@@ -55,6 +57,7 @@ public class UserOrderApplicationService {
     private final UserOrderPolicy userOrderPolicy;
     private final UserPickupContactPolicy userPickupContactPolicy;
     private final UserOrderProperties userOrderProperties;
+    private final UserInventoryReservationService userInventoryReservationService;
 
     public UserOrderApplicationService(UserOrderPersistenceMapper userOrderPersistenceMapper,
                                        UserCartPersistenceMapper userCartPersistenceMapper,
@@ -63,7 +66,8 @@ public class UserOrderApplicationService {
                                        UserPickupPointPersistenceMapper userPickupPointPersistenceMapper,
                                        UserOrderPolicy userOrderPolicy,
                                        UserPickupContactPolicy userPickupContactPolicy,
-                                       UserOrderProperties userOrderProperties) {
+                                       UserOrderProperties userOrderProperties,
+                                       UserInventoryReservationService userInventoryReservationService) {
         this.userOrderPersistenceMapper = userOrderPersistenceMapper;
         this.userCartPersistenceMapper = userCartPersistenceMapper;
         this.userAccountPersistenceMapper = userAccountPersistenceMapper;
@@ -72,6 +76,7 @@ public class UserOrderApplicationService {
         this.userOrderPolicy = userOrderPolicy;
         this.userPickupContactPolicy = userPickupContactPolicy;
         this.userOrderProperties = userOrderProperties;
+        this.userInventoryReservationService = userInventoryReservationService;
     }
 
     @Transactional
@@ -87,13 +92,25 @@ public class UserOrderApplicationService {
         userOrderPolicy.ensureCartItemsEligibleForSubmit(cartItems);
 
         LocalDateTime now = LocalDateTime.now();
-        for (UserOrderCartItemRow cartItem : cartItems) {
-            int affectedRows = userOrderPersistenceMapper.incrementBatchLockedQuantity(
-                    cartItem.getBatchId(),
-                    cartItem.getQuantity(),
-                    now
-            );
-            userOrderPolicy.ensureStockLocked(affectedRows > 0);
+        List<UserInventoryReservationService.ReservedInventoryItem> reservedInventoryItems =
+                userInventoryReservationService.reserve(cartItems);
+        boolean releaseRegistered = false;
+        try {
+            for (UserOrderCartItemRow cartItem : cartItems) {
+                int affectedRows = userOrderPersistenceMapper.incrementBatchLockedQuantity(
+                        cartItem.getBatchId(),
+                        cartItem.getQuantity(),
+                        now
+                );
+                userOrderPolicy.ensureStockLocked(affectedRows > 0);
+            }
+            registerInventoryReservationRelease(reservedInventoryItems);
+            releaseRegistered = !reservedInventoryItems.isEmpty();
+        } catch (RuntimeException ex) {
+            if (!releaseRegistered) {
+                userInventoryReservationService.release(reservedInventoryItems);
+            }
+            throw ex;
         }
 
         UserAccountDataObject user = userAccountPersistenceMapper.findById(authenticatedUser.getUserId());
@@ -133,6 +150,23 @@ public class UserOrderApplicationService {
                 .orderTime(order.getOrderTime())
                 .pickupDeadline(order.getPickupDeadline())
                 .build();
+    }
+
+    private void registerInventoryReservationRelease(
+            List<UserInventoryReservationService.ReservedInventoryItem> reservedInventoryItems) {
+        if (reservedInventoryItems == null || reservedInventoryItems.isEmpty()) {
+            return;
+        }
+        if (!TransactionSynchronizationManager.isSynchronizationActive()) {
+            userInventoryReservationService.release(reservedInventoryItems);
+            return;
+        }
+        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+            @Override
+            public void afterCompletion(int status) {
+                userInventoryReservationService.release(reservedInventoryItems);
+            }
+        });
     }
 
     public PageResponse<UserOrderSummaryResponse> pageOrders(UserAuthenticatedUser authenticatedUser, UserOrderQuery query) {

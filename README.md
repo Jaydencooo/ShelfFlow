@@ -38,9 +38,10 @@ ShelfFlow/
 - **业务闭环优先**：管理端维护商品、分类、批次、定价、自提点和订单履约；用户端浏览商品、加入购物车、选择自提点、下单支付并查看自提码。
 - **微服务边界清晰**：按 gateway、auth、admin、user、migration、common 拆分，避免业务能力散落在前端或脚本中。
 - **分层清晰**：Java 服务按 controller、application service、domain policy、persistence mapper 组织。
-- **配置外置**：数据库、JWT、AI 大模型、邮箱、Nacos、Sentinel、Flyway 均通过环境变量或配置中心管理。
+- **配置外置**：数据库、Redis、JWT、AI 大模型、邮箱、Nacos、Sentinel、Flyway 均通过环境变量或配置中心管理。
 - **阿里巴巴组件增强**：接入 Nacos Discovery/Config 与 Sentinel，支持服务注册发现、集中配置、接口限流和 Gateway 路由保护。
 - **数据库版本化**：独立 Flyway migration service 管理表结构版本，业务服务不抢占式建表。
+- **库存并发保护**：用户下单支持可选 Redis Lua 原子预占，数据库条件更新仍作为最终一致性防线。
 
 ## 核心模块职责
 
