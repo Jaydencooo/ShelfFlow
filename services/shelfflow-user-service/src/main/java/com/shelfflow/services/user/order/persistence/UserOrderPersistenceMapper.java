@@ -48,7 +48,13 @@ public interface UserOrderPersistenceMapper {
 
     UserOrderDetailRow findOrderByIdAndUserId(@Param("id") Long id, @Param("userId") Long userId);
 
+    UserOrderDetailRow findOrderByNumber(@Param("orderNumber") String orderNumber);
+
     UserOrderPaymentDataObject findOrderPaymentByOrderId(@Param("orderId") Long orderId);
+
+    UserOrderPaymentDataObject findOrderPaymentByPaymentNo(@Param("paymentNo") String paymentNo);
+
+    UserOrderPaymentDataObject findOrderPaymentByCallbackEventId(@Param("callbackEventId") String callbackEventId);
 
     void insertOrderPayment(UserOrderPaymentDataObject payment);
 
@@ -56,6 +62,15 @@ public interface UserOrderPersistenceMapper {
                                   @Param("status") Integer status,
                                   @Param("paidTime") LocalDateTime paidTime,
                                   @Param("updateTime") LocalDateTime updateTime);
+
+    int attachSuccessfulPaymentCallback(@Param("id") Long id,
+                                        @Param("status") Integer status,
+                                        @Param("provider") String provider,
+                                        @Param("externalTradeNo") String externalTradeNo,
+                                        @Param("callbackEventId") String callbackEventId,
+                                        @Param("paidTime") LocalDateTime paidTime,
+                                        @Param("callbackTime") LocalDateTime callbackTime,
+                                        @Param("updateTime") LocalDateTime updateTime);
 
     List<UserOrderTimeoutCandidateRow> listTimeoutCloseCandidates(@Param("deadline") LocalDateTime deadline,
                                                                   @Param("status") Integer status,

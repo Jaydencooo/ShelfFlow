@@ -17,8 +17,11 @@ public class UserOrderPaymentDataObject {
     private String provider;
     private Integer status;
     private String idempotencyKey;
+    private String externalTradeNo;
+    private String callbackEventId;
     private LocalDateTime requestTime;
     private LocalDateTime paidTime;
+    private LocalDateTime callbackTime;
     private LocalDateTime createTime;
     private LocalDateTime updateTime;
 }

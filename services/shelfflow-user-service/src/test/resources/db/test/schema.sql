@@ -187,8 +187,11 @@ CREATE TABLE user_order_payment (
     provider VARCHAR(32) NOT NULL,
     status INT NOT NULL,
     idempotency_key VARCHAR(128) NOT NULL,
+    external_trade_no VARCHAR(128),
+    callback_event_id VARCHAR(128),
     request_time TIMESTAMP NOT NULL,
     paid_time TIMESTAMP,
+    callback_time TIMESTAMP,
     create_time TIMESTAMP NOT NULL,
     update_time TIMESTAMP NOT NULL
 );
@@ -196,3 +199,5 @@ CREATE TABLE user_order_payment (
 CREATE UNIQUE INDEX uk_user_order_payment_no ON user_order_payment(payment_no);
 CREATE UNIQUE INDEX uk_user_order_payment_order ON user_order_payment(order_id);
 CREATE UNIQUE INDEX uk_user_order_payment_idempotency ON user_order_payment(idempotency_key);
+CREATE UNIQUE INDEX uk_user_order_payment_external_trade ON user_order_payment(external_trade_no);
+CREATE UNIQUE INDEX uk_user_order_payment_callback_event ON user_order_payment(callback_event_id);

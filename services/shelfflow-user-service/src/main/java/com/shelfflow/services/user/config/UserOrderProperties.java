@@ -20,6 +20,7 @@ public class UserOrderProperties {
     private InventoryReservation inventoryReservation = new InventoryReservation();
     private Events events = new Events();
     private TimeoutClose timeoutClose = new TimeoutClose();
+    private PaymentCallback paymentCallback = new PaymentCallback();
 
     @Data
     public static class InventoryReservation {
@@ -50,5 +51,12 @@ public class UserOrderProperties {
         private long fixedDelayMilliseconds = 60000;
         private int batchSize = 100;
         private String cancelReason = "订单超时未支付，系统自动取消";
+    }
+
+    @Data
+    public static class PaymentCallback {
+        private boolean enabled;
+        private boolean requireSignature = true;
+        private String callbackSecret = "";
     }
 }

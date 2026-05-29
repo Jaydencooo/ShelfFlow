@@ -1,6 +1,7 @@
 package com.shelfflow.services.user.order.service;
 
 import com.shelfflow.services.common.api.PageResponse;
+import com.shelfflow.services.common.api.ErrorCode;
 import com.shelfflow.services.common.domain.OrderEventActorType;
 import com.shelfflow.services.common.domain.OrderEventType;
 import com.shelfflow.services.common.exception.ApplicationException;
@@ -15,6 +16,8 @@ import com.shelfflow.services.common.dto.UserOrderQuery;
 import com.shelfflow.services.common.dto.UserOrderSubmitRequest;
 import com.shelfflow.services.common.dto.UserOrderSubmitResponse;
 import com.shelfflow.services.common.dto.UserOrderSummaryResponse;
+import com.shelfflow.services.common.dto.UserPaymentCallbackRequest;
+import com.shelfflow.services.common.dto.UserPaymentCallbackResponse;
 import com.shelfflow.services.common.security.UserAuthenticatedUser;
 import com.shelfflow.services.user.auth.persistence.UserAccountPersistenceMapper;
 import com.shelfflow.services.user.auth.persistence.dataobject.UserAccountDataObject;
@@ -44,12 +47,18 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionSynchronization;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
 
+import javax.crypto.Mac;
+import javax.crypto.spec.SecretKeySpec;
 import java.math.BigDecimal;
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.HexFormat;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Locale;
 
 @Service
 public class UserOrderApplicationService {
@@ -58,6 +67,8 @@ public class UserOrderApplicationService {
     private static final String PAYMENT_IDEMPOTENCY_PREFIX = "user-order-pay";
     private static final String PAYMENT_IDEMPOTENCY_SEPARATOR = ":";
     private static final String DEFAULT_PAYMENT_PROVIDER = "mock";
+    private static final String PAYMENT_CALLBACK_STATUS_SUCCEEDED = "succeeded";
+    private static final String HMAC_SHA256_ALGORITHM = "HmacSHA256";
 
     private final UserOrderPersistenceMapper userOrderPersistenceMapper;
     private final UserCartPersistenceMapper userCartPersistenceMapper;
@@ -348,6 +359,80 @@ public class UserOrderApplicationService {
         return getOrderDetail(authenticatedUser, orderId);
     }
 
+    @Transactional
+    public UserPaymentCallbackResponse confirmPaymentCallback(UserPaymentCallbackRequest request, String signature) {
+        ensurePaymentCallbackEnabled();
+        verifyPaymentCallbackSignature(request, signature);
+
+        LocalDateTime now = LocalDateTime.now();
+        String paymentNo = normalizeRequiredText(request.getPaymentNo(), "paymentNo");
+        String externalTradeNo = normalizeRequiredText(request.getExternalTradeNo(), "externalTradeNo");
+        String callbackEventId = normalizeRequiredText(request.getCallbackEventId(), "callbackEventId");
+        String provider = normalizeRequiredText(request.getProvider(), "provider");
+        String callbackStatus = normalizeRequiredText(request.getStatus(), "status").toLowerCase(Locale.ROOT);
+        if (!PAYMENT_CALLBACK_STATUS_SUCCEEDED.equals(callbackStatus)) {
+            throw new ApplicationException(ErrorCode.VALIDATION_ERROR, "当前仅支持支付成功回调");
+        }
+
+        UserOrderPaymentDataObject payment = resolveOrCreateCallbackPayment(paymentNo, now);
+        ensurePaymentAmountMatched(payment, request.getAmount());
+        UserOrderPaymentDataObject callbackPayment = userOrderPersistenceMapper.findOrderPaymentByCallbackEventId(callbackEventId);
+        if (callbackPayment != null && !callbackPayment.getId().equals(payment.getId())) {
+            throw new ApplicationException(ErrorCode.CONFLICT, "支付回调事件已被其他支付单处理");
+        }
+
+        boolean duplicate = UserOrderPaymentStatus.fromLegacy(payment.getStatus()) == UserOrderPaymentStatus.SUCCEEDED;
+        LocalDateTime paidTime = request.getPaidTime() == null ? now : request.getPaidTime();
+        attachSuccessfulPaymentCallback(payment, provider, externalTradeNo, callbackEventId, paidTime, now);
+
+        UserOrderDetailRow row = userOrderPersistenceMapper.findOrderByIdAndUserId(payment.getOrderId(), payment.getUserId());
+        userOrderPolicy.ensureOrderExists(row != null);
+        UserOrderStatus currentStatus = UserOrderStatus.fromLegacy(row.getStatus());
+        UserOrderPayStatus currentPayStatus = UserOrderPayStatus.fromLegacy(row.getPayStatus());
+        if (currentPayStatus != UserOrderPayStatus.PAID) {
+            userOrderPolicy.ensurePayableStatus(currentStatus, currentPayStatus);
+            int affectedRows = userOrderPersistenceMapper.payOrder(
+                    row.getId(),
+                    UserOrderStatus.TO_PREPARE.legacyValue(),
+                    UserOrderPayStatus.PAID.legacyValue(),
+                    paidTime
+            );
+            if (affectedRows <= 0) {
+                UserOrderDetailRow latestRow = userOrderPersistenceMapper.findOrderByIdAndUserId(payment.getOrderId(), payment.getUserId());
+                if (latestRow == null || UserOrderPayStatus.fromLegacy(latestRow.getPayStatus()) != UserOrderPayStatus.PAID) {
+                    throw new ApplicationException(ErrorCode.CONFLICT, "当前订单状态不允许支付回调确认");
+                }
+                duplicate = true;
+                row = latestRow;
+            } else {
+                insertAndPublishOrderEvent(buildOrderEvent(
+                        row.getId(),
+                        OrderEventType.PAID,
+                        OrderEventActorType.SYSTEM,
+                        null,
+                        currentStatus,
+                        UserOrderStatus.TO_PREPARE,
+                        currentPayStatus,
+                        UserOrderPayStatus.PAID,
+                        "支付平台回调确认支付",
+                        paidTime
+                ), row.getNumber(), payment.getUserId(), row.getAmount(), null);
+                row = userOrderPersistenceMapper.findOrderByIdAndUserId(payment.getOrderId(), payment.getUserId());
+            }
+        }
+
+        return UserPaymentCallbackResponse.builder()
+                .paymentNo(paymentNo)
+                .orderId(String.valueOf(payment.getOrderId()))
+                .orderNumber(payment.getOrderNumber())
+                .externalTradeNo(externalTradeNo)
+                .callbackEventId(callbackEventId)
+                .orderStatus(UserOrderStatus.fromLegacy(row.getStatus()).value())
+                .payStatus(UserOrderPayStatus.fromLegacy(row.getPayStatus()).value())
+                .duplicate(duplicate)
+                .build();
+    }
+
     private UserOrderPaymentDataObject resolveOrCreatePayment(UserOrderDetailRow row,
                                                               UserAuthenticatedUser authenticatedUser,
                                                               LocalDateTime requestTime) {
@@ -394,21 +479,60 @@ public class UserOrderApplicationService {
     private UserOrderPaymentDataObject buildOrderPayment(UserOrderDetailRow row,
                                                          UserAuthenticatedUser authenticatedUser,
                                                          LocalDateTime requestTime) {
+        return buildOrderPayment(row, authenticatedUser.getUserId(), requestTime);
+    }
+
+    private UserOrderPaymentDataObject buildOrderPayment(UserOrderDetailRow row,
+                                                         Long userId,
+                                                         LocalDateTime requestTime) {
         UserOrderPaymentDataObject payment = new UserOrderPaymentDataObject();
         payment.setPaymentNo(buildPaymentNo(row));
         payment.setOrderId(row.getId());
         payment.setOrderNumber(row.getNumber());
-        payment.setUserId(authenticatedUser.getUserId());
+        payment.setUserId(userId);
         payment.setAmount(row.getAmount());
         payment.setPayMethod(row.getPayMethod() == null ? userOrderProperties.getDefaultPayMethod() : row.getPayMethod());
         payment.setProvider(DEFAULT_PAYMENT_PROVIDER);
         payment.setStatus(UserOrderPaymentStatus.PENDING.legacyValue());
-        payment.setIdempotencyKey(buildPaymentIdempotencyKey(authenticatedUser.getUserId(), row.getId()));
+        payment.setIdempotencyKey(buildPaymentIdempotencyKey(userId, row.getId()));
+        payment.setExternalTradeNo(null);
+        payment.setCallbackEventId(null);
         payment.setRequestTime(requestTime);
         payment.setPaidTime(null);
+        payment.setCallbackTime(null);
         payment.setCreateTime(requestTime);
         payment.setUpdateTime(requestTime);
         return payment;
+    }
+
+    private UserOrderPaymentDataObject resolveOrCreateCallbackPayment(String paymentNo, LocalDateTime requestTime) {
+        UserOrderPaymentDataObject existingPayment = userOrderPersistenceMapper.findOrderPaymentByPaymentNo(paymentNo);
+        if (existingPayment != null) {
+            return existingPayment;
+        }
+        UserOrderDetailRow row = userOrderPersistenceMapper.findOrderByNumber(resolveOrderNumberFromPaymentNo(paymentNo));
+        userOrderPolicy.ensureOrderExists(row != null);
+        UserOrderPaymentDataObject payment = buildOrderPayment(row, row.getUserId(), requestTime);
+        if (!paymentNo.equals(payment.getPaymentNo())) {
+            throw new ApplicationException(ErrorCode.NOT_FOUND, "支付单不存在");
+        }
+        try {
+            userOrderPersistenceMapper.insertOrderPayment(payment);
+            return payment;
+        } catch (DuplicateKeyException ex) {
+            UserOrderPaymentDataObject concurrentPayment = userOrderPersistenceMapper.findOrderPaymentByPaymentNo(paymentNo);
+            if (concurrentPayment != null) {
+                return concurrentPayment;
+            }
+            throw ex;
+        }
+    }
+
+    private String resolveOrderNumberFromPaymentNo(String paymentNo) {
+        if (!paymentNo.startsWith(PAYMENT_NO_PREFIX) || paymentNo.length() <= PAYMENT_NO_PREFIX.length()) {
+            throw new ApplicationException(ErrorCode.NOT_FOUND, "支付单不存在");
+        }
+        return paymentNo.substring(PAYMENT_NO_PREFIX.length());
     }
 
     private String buildPaymentNo(UserOrderDetailRow row) {
@@ -422,6 +546,107 @@ public class UserOrderApplicationService {
                 + userId
                 + PAYMENT_IDEMPOTENCY_SEPARATOR
                 + orderId;
+    }
+
+    private void ensurePaymentCallbackEnabled() {
+        if (!userOrderProperties.getPaymentCallback().isEnabled()) {
+            throw new ApplicationException(ErrorCode.NOT_FOUND, "支付回调未开启");
+        }
+    }
+
+    private void verifyPaymentCallbackSignature(UserPaymentCallbackRequest request, String signature) {
+        UserOrderProperties.PaymentCallback properties = userOrderProperties.getPaymentCallback();
+        if (!properties.isRequireSignature()) {
+            return;
+        }
+        String callbackSecret = normalizeOptionalText(properties.getCallbackSecret());
+        if (callbackSecret == null) {
+            throw new ApplicationException(ErrorCode.DEPENDENCY_ERROR, "支付回调密钥未配置");
+        }
+        String normalizedSignature = normalizeOptionalText(signature);
+        if (normalizedSignature == null) {
+            throw new ApplicationException(ErrorCode.UNAUTHORIZED, "支付回调签名缺失");
+        }
+        String expectedSignature = signPaymentCallback(request, callbackSecret);
+        if (!MessageDigest.isEqual(
+                expectedSignature.getBytes(StandardCharsets.UTF_8),
+                normalizedSignature.getBytes(StandardCharsets.UTF_8))) {
+            throw new ApplicationException(ErrorCode.UNAUTHORIZED, "支付回调签名不合法");
+        }
+    }
+
+    private String signPaymentCallback(UserPaymentCallbackRequest request, String callbackSecret) {
+        try {
+            Mac mac = Mac.getInstance(HMAC_SHA256_ALGORITHM);
+            mac.init(new SecretKeySpec(callbackSecret.getBytes(StandardCharsets.UTF_8), HMAC_SHA256_ALGORITHM));
+            return HexFormat.of().formatHex(mac.doFinal(paymentCallbackPayload(request).getBytes(StandardCharsets.UTF_8)));
+        } catch (Exception exception) {
+            throw new ApplicationException(ErrorCode.INTERNAL_ERROR, "支付回调签名计算失败");
+        }
+    }
+
+    private String paymentCallbackPayload(UserPaymentCallbackRequest request) {
+        return normalizeRequiredText(request.getCallbackEventId(), "callbackEventId") + "\n"
+                + normalizeRequiredText(request.getPaymentNo(), "paymentNo") + "\n"
+                + normalizeRequiredText(request.getExternalTradeNo(), "externalTradeNo") + "\n"
+                + normalizeRequiredText(request.getStatus(), "status").toLowerCase(Locale.ROOT) + "\n"
+                + normalizeCallbackAmount(request.getAmount());
+    }
+
+    private void ensurePaymentAmountMatched(UserOrderPaymentDataObject payment, BigDecimal callbackAmount) {
+        if (payment.getAmount() == null || callbackAmount == null || payment.getAmount().compareTo(callbackAmount) != 0) {
+            throw new ApplicationException(ErrorCode.CONFLICT, "支付金额与订单金额不一致");
+        }
+    }
+
+    private void attachSuccessfulPaymentCallback(UserOrderPaymentDataObject payment,
+                                                 String provider,
+                                                 String externalTradeNo,
+                                                 String callbackEventId,
+                                                 LocalDateTime paidTime,
+                                                 LocalDateTime callbackTime) {
+        int affectedRows = userOrderPersistenceMapper.attachSuccessfulPaymentCallback(
+                payment.getId(),
+                UserOrderPaymentStatus.SUCCEEDED.legacyValue(),
+                provider,
+                externalTradeNo,
+                callbackEventId,
+                paidTime,
+                callbackTime,
+                callbackTime
+        );
+        if (affectedRows <= 0) {
+            UserOrderPaymentDataObject latestPayment = userOrderPersistenceMapper.findOrderPaymentByPaymentNo(payment.getPaymentNo());
+            if (latestPayment == null
+                    || UserOrderPaymentStatus.fromLegacy(latestPayment.getStatus()) != UserOrderPaymentStatus.SUCCEEDED
+                    || !externalTradeNo.equals(latestPayment.getExternalTradeNo())
+                    || !callbackEventId.equals(latestPayment.getCallbackEventId())) {
+                throw new ApplicationException(ErrorCode.CONFLICT, "支付回调状态更新失败，请检查回调幂等信息");
+            }
+        }
+    }
+
+    private String normalizeRequiredText(String value, String fieldName) {
+        String normalized = normalizeOptionalText(value);
+        if (normalized == null) {
+            throw new ApplicationException(ErrorCode.VALIDATION_ERROR, fieldName + " 不能为空");
+        }
+        return normalized;
+    }
+
+    private String normalizeOptionalText(String value) {
+        if (value == null) {
+            return null;
+        }
+        String trimmed = value.trim();
+        return trimmed.isEmpty() ? null : trimmed;
+    }
+
+    private String normalizeCallbackAmount(BigDecimal amount) {
+        if (amount == null) {
+            throw new ApplicationException(ErrorCode.VALIDATION_ERROR, "amount 不能为空");
+        }
+        return amount.stripTrailingZeros().toPlainString();
     }
 
     private void insertAndPublishOrderEvent(UserOrderEventDataObject event,

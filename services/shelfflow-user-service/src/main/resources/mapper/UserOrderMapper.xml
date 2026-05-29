@@ -225,6 +225,7 @@
         select
             o.id,
             o.number,
+            o.user_id as userId,
             o.status,
             o.pay_status as payStatus,
             o.amount,
@@ -325,6 +326,30 @@
         limit 1
     </select>
 
+    <select id="findOrderByNumber" resultType="com.shelfflow.services.user.order.persistence.dataobject.UserOrderDetailRow">
+        select
+            o.id,
+            o.number,
+            o.user_id as userId,
+            o.status,
+            o.pay_status as payStatus,
+            o.amount,
+            o.remark,
+            o.phone,
+            o.pickup_point as pickupPoint,
+            o.consignee,
+            o.pickup_code as pickupCode,
+            o.order_time as orderTime,
+            o.checkout_time as checkoutTime,
+            o.pay_method as payMethod,
+            o.pickup_deadline as pickupDeadline,
+            o.cancel_time as cancelTime,
+            o.cancel_reason as cancelReason
+        from orders o
+        where o.number = #{orderNumber}
+        limit 1
+    </select>
+
     <select id="findOrderPaymentByOrderId" resultType="com.shelfflow.services.user.order.persistence.dataobject.UserOrderPaymentDataObject">
         select
             id,
@@ -337,12 +362,63 @@
             provider,
             status,
             idempotency_key as idempotencyKey,
+            external_trade_no as externalTradeNo,
+            callback_event_id as callbackEventId,
             request_time as requestTime,
             paid_time as paidTime,
+            callback_time as callbackTime,
             create_time as createTime,
             update_time as updateTime
         from user_order_payment
         where order_id = #{orderId}
+        limit 1
+    </select>
+
+    <select id="findOrderPaymentByPaymentNo" resultType="com.shelfflow.services.user.order.persistence.dataobject.UserOrderPaymentDataObject">
+        select
+            id,
+            payment_no as paymentNo,
+            order_id as orderId,
+            order_number as orderNumber,
+            user_id as userId,
+            amount,
+            pay_method as payMethod,
+            provider,
+            status,
+            idempotency_key as idempotencyKey,
+            external_trade_no as externalTradeNo,
+            callback_event_id as callbackEventId,
+            request_time as requestTime,
+            paid_time as paidTime,
+            callback_time as callbackTime,
+            create_time as createTime,
+            update_time as updateTime
+        from user_order_payment
+        where payment_no = #{paymentNo}
+        limit 1
+    </select>
+
+    <select id="findOrderPaymentByCallbackEventId" resultType="com.shelfflow.services.user.order.persistence.dataobject.UserOrderPaymentDataObject">
+        select
+            id,
+            payment_no as paymentNo,
+            order_id as orderId,
+            order_number as orderNumber,
+            user_id as userId,
+            amount,
+            pay_method as payMethod,
+            provider,
+            status,
+            idempotency_key as idempotencyKey,
+            external_trade_no as externalTradeNo,
+            callback_event_id as callbackEventId,
+            request_time as requestTime,
+            paid_time as paidTime,
+            callback_time as callbackTime,
+            create_time as createTime,
+            update_time as updateTime
+        from user_order_payment
+        where callback_event_id = #{callbackEventId}
         limit 1
     </select>
 
@@ -358,8 +434,11 @@
             provider,
             status,
             idempotency_key,
+            external_trade_no,
+            callback_event_id,
             request_time,
             paid_time,
+            callback_time,
             create_time,
             update_time
         ) values (
@@ -372,8 +451,11 @@
             #{provider},
             #{status},
             #{idempotencyKey},
+            #{externalTradeNo},
+            #{callbackEventId},
             #{requestTime},
             #{paidTime},
+            #{callbackTime},
             #{createTime},
             #{updateTime}
         )
@@ -387,6 +469,21 @@
             update_time = #{updateTime}
         where id = #{id}
           and status = 0
+    </update>
+
+    <update id="attachSuccessfulPaymentCallback">
+        update user_order_payment
+        set
+            status = #{status},
+            provider = #{provider},
+            external_trade_no = #{externalTradeNo},
+            callback_event_id = #{callbackEventId},
+            paid_time = coalesce(paid_time, #{paidTime}),
+            callback_time = #{callbackTime},
+            update_time = #{updateTime}
+        where id = #{id}
+          and (external_trade_no is null or external_trade_no = #{externalTradeNo})
+          and (callback_event_id is null or callback_event_id = #{callbackEventId})
     </update>
 
     <select id="listTimeoutCloseCandidates" resultType="com.shelfflow.services.user.order.persistence.dataobject.UserOrderTimeoutCandidateRow">

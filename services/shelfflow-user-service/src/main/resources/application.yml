@@ -119,6 +119,10 @@ shelfflow:
         fixed-delay-milliseconds: ${USER_ORDER_TIMEOUT_CLOSE_FIXED_DELAY_MILLISECONDS:60000}
         batch-size: ${USER_ORDER_TIMEOUT_CLOSE_BATCH_SIZE:100}
         cancel-reason: ${USER_ORDER_TIMEOUT_CLOSE_CANCEL_REASON:订单超时未支付，系统自动取消}
+      payment-callback:
+        enabled: ${USER_ORDER_PAYMENT_CALLBACK_ENABLED:false}
+        require-signature: ${USER_ORDER_PAYMENT_CALLBACK_REQUIRE_SIGNATURE:true}
+        callback-secret: ${USER_ORDER_PAYMENT_CALLBACK_SECRET:}
   sentinel:
     enabled: ${SHELFFLOW_SENTINEL_ENABLED:false}
     flow-rules:

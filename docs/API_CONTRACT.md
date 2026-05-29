@@ -185,6 +185,7 @@ AI 运营助手核心字段固定为：
 - `GET /api/user/orders/{id}` 订单详情
 - `DELETE /api/user/orders/{id}` 取消订单并释放库存，可选传入 `cancelReason`
 - `POST /api/user/orders/{id}/pay` 支付确认
+- `POST /api/user/payment-callbacks/mock` 模拟支付平台回调，需 `X-ShelfFlow-Payment-Signature` 签名
 
 ## 响应结构
 

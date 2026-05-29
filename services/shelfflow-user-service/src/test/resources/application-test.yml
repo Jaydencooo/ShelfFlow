@@ -30,3 +30,8 @@ shelfflow:
   jwt:
     secret: test-secret
     expires-in: PT12H
+  user:
+    order:
+      payment-callback:
+        enabled: true
+        callback-secret: test-payment-callback-secret

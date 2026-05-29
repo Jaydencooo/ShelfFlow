@@ -9,6 +9,7 @@ import java.time.LocalDateTime;
 public class UserOrderDetailRow {
     private Long id;
     private String number;
+    private Long userId;
     private Integer status;
     private Integer payStatus;
     private BigDecimal amount;

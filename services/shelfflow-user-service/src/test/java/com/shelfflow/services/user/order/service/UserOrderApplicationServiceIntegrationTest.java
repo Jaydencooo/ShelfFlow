@@ -9,6 +9,8 @@ import com.shelfflow.services.common.dto.UserOrderDetailResponse;
 import com.shelfflow.services.common.dto.UserOrderSubmitRequest;
 import com.shelfflow.services.common.dto.UserOrderSubmitResponse;
 import com.shelfflow.services.common.dto.UserOrderSummaryResponse;
+import com.shelfflow.services.common.dto.UserPaymentCallbackRequest;
+import com.shelfflow.services.common.dto.UserPaymentCallbackResponse;
 import com.shelfflow.services.common.exception.ApplicationException;
 import com.shelfflow.services.common.security.UserAuthenticatedUser;
 import com.shelfflow.services.user.ShelfFlowUserServiceApplication;
@@ -21,8 +23,12 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.transaction.annotation.Transactional;
 
+import javax.crypto.Mac;
+import javax.crypto.spec.SecretKeySpec;
 import java.math.BigDecimal;
+import java.nio.charset.StandardCharsets;
 import java.time.LocalDateTime;
+import java.util.HexFormat;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -37,6 +43,7 @@ class UserOrderApplicationServiceIntegrationTest {
 
     private static final UserAuthenticatedUser USER = new UserAuthenticatedUser(4001L, "openid-seeded", "token");
     private static final UserAuthenticatedUser EMAIL_ONLY_USER = new UserAuthenticatedUser(4002L, "recover@example.com", "token");
+    private static final String PAYMENT_CALLBACK_SECRET = "test-payment-callback-secret";
 
     @Autowired
     private UserOrderApplicationService userOrderApplicationService;
@@ -231,6 +238,43 @@ class UserOrderApplicationServiceIntegrationTest {
     }
 
     @Test
+    void paymentCallbackShouldConfirmPendingOrderAndBeIdempotent() {
+        UserCartItemAddRequest request = new UserCartItemAddRequest();
+        request.setProductId("1001");
+        request.setQuantity(1);
+        userCartApplicationService.addItem(USER, request);
+
+        UserOrderSubmitResponse submitResponse = userOrderApplicationService.submit(USER, new UserOrderSubmitRequest());
+        UserPaymentCallbackRequest callbackRequest = buildPaymentCallbackRequest(submitResponse.getOrderNumber(), submitResponse.getTotalAmount());
+
+        UserPaymentCallbackResponse callbackResponse = userOrderApplicationService.confirmPaymentCallback(
+                callbackRequest,
+                sign(callbackRequest)
+        );
+        UserPaymentCallbackResponse repeatedResponse = userOrderApplicationService.confirmPaymentCallback(
+                callbackRequest,
+                sign(callbackRequest)
+        );
+
+        assertEquals("paid", callbackResponse.getPayStatus());
+        assertEquals("to_prepare", callbackResponse.getOrderStatus());
+        assertFalse(callbackResponse.isDuplicate());
+        assertEquals("paid", repeatedResponse.getPayStatus());
+        assertEquals(true, repeatedResponse.isDuplicate());
+        UserOrderPaymentDataObject payment = userOrderPersistenceMapper.findOrderPaymentByOrderId(Long.valueOf(submitResponse.getId()));
+        assertNotNull(payment);
+        assertEquals("mock-trade-" + submitResponse.getOrderNumber(), payment.getExternalTradeNo());
+        assertEquals("mock-callback-" + submitResponse.getOrderNumber(), payment.getCallbackEventId());
+    }
+
+    @Test
+    void paymentCallbackShouldRejectInvalidSignature() {
+        UserPaymentCallbackRequest callbackRequest = buildPaymentCallbackRequest("SFU202605130001", new BigDecimal("26.25"));
+
+        assertThrows(ApplicationException.class, () -> userOrderApplicationService.confirmPaymentCallback(callbackRequest, "bad-signature"));
+    }
+
+    @Test
     void timeoutCloseShouldCancelExpiredPendingPaymentOrdersAndReleaseStock() {
         int closedCount = userOrderTimeoutCloseService.closeExpiredPendingPaymentOrders(LocalDateTime.now().plusHours(1));
 
@@ -240,5 +284,32 @@ class UserOrderApplicationServiceIntegrationTest {
         assertEquals("订单超时未支付，系统自动取消", detailResponse.getCancelReason());
         assertEquals("system", detailResponse.getEvents().get(detailResponse.getEvents().size() - 1).getActorType().value());
         assertEquals("cancelled", detailResponse.getEvents().get(detailResponse.getEvents().size() - 1).getEventType().value());
+    }
+
+    private UserPaymentCallbackRequest buildPaymentCallbackRequest(String orderNumber, BigDecimal amount) {
+        UserPaymentCallbackRequest request = new UserPaymentCallbackRequest();
+        request.setPaymentNo("PAY" + orderNumber);
+        request.setExternalTradeNo("mock-trade-" + orderNumber);
+        request.setCallbackEventId("mock-callback-" + orderNumber);
+        request.setProvider("mock");
+        request.setStatus("succeeded");
+        request.setAmount(amount);
+        request.setPaidTime(LocalDateTime.now());
+        return request;
+    }
+
+    private String sign(UserPaymentCallbackRequest request) {
+        try {
+            Mac mac = Mac.getInstance("HmacSHA256");
+            mac.init(new SecretKeySpec(PAYMENT_CALLBACK_SECRET.getBytes(StandardCharsets.UTF_8), "HmacSHA256"));
+            String payload = request.getCallbackEventId() + "\n"
+                    + request.getPaymentNo() + "\n"
+                    + request.getExternalTradeNo() + "\n"
+                    + request.getStatus() + "\n"
+                    + request.getAmount().stripTrailingZeros().toPlainString();
+            return HexFormat.of().formatHex(mac.doFinal(payload.getBytes(StandardCharsets.UTF_8)));
+        } catch (Exception exception) {
+            throw new IllegalStateException(exception);
+        }
     }
 }
