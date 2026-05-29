@@ -14,6 +14,7 @@ import com.shelfflow.services.common.security.UserAuthenticatedUser;
 import com.shelfflow.services.user.ShelfFlowUserServiceApplication;
 import com.shelfflow.services.user.cart.service.UserCartApplicationService;
 import com.shelfflow.services.user.order.persistence.UserOrderPersistenceMapper;
+import com.shelfflow.services.user.order.persistence.dataobject.UserOrderPaymentDataObject;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -215,11 +216,18 @@ class UserOrderApplicationServiceIntegrationTest {
     }
 
     @Test
-    void payOrderShouldRejectWhenAlreadyPaid() {
+    void payOrderShouldBeIdempotentWhenAlreadyPaid() {
         UserOrderDetailResponse detailResponse = userOrderApplicationService.payOrder(USER, "5001");
         assertEquals("to_prepare", detailResponse.getStatus().value());
 
-        assertThrows(ApplicationException.class, () -> userOrderApplicationService.payOrder(USER, "5001"));
+        UserOrderDetailResponse repeatedResponse = userOrderApplicationService.payOrder(USER, "5001");
+        assertEquals("to_prepare", repeatedResponse.getStatus().value());
+        assertEquals("paid", repeatedResponse.getPayStatus().value());
+        UserOrderPaymentDataObject payment = userOrderPersistenceMapper.findOrderPaymentByOrderId(5001L);
+        assertNotNull(payment);
+        assertEquals(1, payment.getStatus());
+        assertEquals("PAYSFU202605130001", payment.getPaymentNo());
+        assertEquals("user-order-pay:4001:5001", payment.getIdempotencyKey());
     }
 
     @Test

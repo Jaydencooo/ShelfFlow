@@ -4,6 +4,7 @@ import com.shelfflow.services.common.api.PageResponse;
 import com.shelfflow.services.common.domain.OrderEventActorType;
 import com.shelfflow.services.common.domain.OrderEventType;
 import com.shelfflow.services.common.exception.ApplicationException;
+import com.shelfflow.services.common.domain.UserOrderPaymentStatus;
 import com.shelfflow.services.common.domain.UserOrderPayStatus;
 import com.shelfflow.services.common.domain.UserOrderStatus;
 import com.shelfflow.services.common.dto.OrderEventResponse;
@@ -30,12 +31,14 @@ import com.shelfflow.services.user.order.persistence.dataobject.UserOrderDetailD
 import com.shelfflow.services.user.order.persistence.dataobject.UserOrderEventDataObject;
 import com.shelfflow.services.user.order.persistence.dataobject.UserOrderItemRow;
 import com.shelfflow.services.user.order.persistence.dataobject.UserOrderPageCriteria;
+import com.shelfflow.services.user.order.persistence.dataobject.UserOrderPaymentDataObject;
 import com.shelfflow.services.user.order.persistence.dataobject.UserOrderSummaryRow;
 import com.shelfflow.services.user.pickupcontact.domain.UserPickupContactPolicy;
 import com.shelfflow.services.user.pickupcontact.persistence.UserPickupContactPersistenceMapper;
 import com.shelfflow.services.user.pickupcontact.persistence.dataobject.UserPickupContactDataObject;
 import com.shelfflow.services.user.pickuppoint.persistence.UserPickupPointPersistenceMapper;
 import com.shelfflow.services.user.pickuppoint.persistence.dataobject.UserPickupPointDataObject;
+import org.springframework.dao.DuplicateKeyException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionSynchronization;
@@ -50,6 +53,11 @@ import java.util.Map;
 
 @Service
 public class UserOrderApplicationService {
+
+    private static final String PAYMENT_NO_PREFIX = "PAY";
+    private static final String PAYMENT_IDEMPOTENCY_PREFIX = "user-order-pay";
+    private static final String PAYMENT_IDEMPOTENCY_SEPARATOR = ":";
+    private static final String DEFAULT_PAYMENT_PROVIDER = "mock";
 
     private final UserOrderPersistenceMapper userOrderPersistenceMapper;
     private final UserCartPersistenceMapper userCartPersistenceMapper;
@@ -295,12 +303,21 @@ public class UserOrderApplicationService {
         Long id = userOrderPolicy.parseRequiredOrderId(orderId);
         UserOrderDetailRow row = userOrderPersistenceMapper.findOrderByIdAndUserId(id, authenticatedUser.getUserId());
         userOrderPolicy.ensureOrderExists(row != null);
-        userOrderPolicy.ensurePayableStatus(
-                UserOrderStatus.fromLegacy(row.getStatus()),
-                UserOrderPayStatus.fromLegacy(row.getPayStatus())
-        );
+        UserOrderStatus currentStatus = UserOrderStatus.fromLegacy(row.getStatus());
+        UserOrderPayStatus currentPayStatus = UserOrderPayStatus.fromLegacy(row.getPayStatus());
 
         LocalDateTime checkoutTime = LocalDateTime.now();
+        UserOrderPaymentDataObject payment = resolveOrCreatePayment(row, authenticatedUser, checkoutTime);
+        if (currentPayStatus == UserOrderPayStatus.PAID) {
+            markPaymentSucceededIfNecessary(payment, checkoutTime);
+            return getOrderDetail(authenticatedUser, orderId);
+        }
+
+        userOrderPolicy.ensurePayableStatus(
+                currentStatus,
+                currentPayStatus
+        );
+
         int affectedRows = userOrderPersistenceMapper.payOrder(
                 id,
                 UserOrderStatus.TO_PREPARE.legacyValue(),
@@ -308,21 +325,103 @@ public class UserOrderApplicationService {
                 checkoutTime
         );
         if (affectedRows <= 0) {
+            UserOrderDetailRow latestRow = userOrderPersistenceMapper.findOrderByIdAndUserId(id, authenticatedUser.getUserId());
+            if (latestRow != null && UserOrderPayStatus.fromLegacy(latestRow.getPayStatus()) == UserOrderPayStatus.PAID) {
+                markPaymentSucceededIfNecessary(payment, checkoutTime);
+                return getOrderDetail(authenticatedUser, orderId);
+            }
             throw new ApplicationException(com.shelfflow.services.common.api.ErrorCode.CONFLICT, "当前订单状态不允许支付");
         }
+        markPaymentSucceededIfNecessary(payment, checkoutTime);
         insertAndPublishOrderEvent(buildOrderEvent(
                 id,
                 OrderEventType.PAID,
                 OrderEventActorType.USER,
                 authenticatedUser.getUserId(),
-                UserOrderStatus.fromLegacy(row.getStatus()),
+                currentStatus,
                 UserOrderStatus.TO_PREPARE,
-                UserOrderPayStatus.fromLegacy(row.getPayStatus()),
+                currentPayStatus,
                 UserOrderPayStatus.PAID,
                 "用户确认支付",
                 checkoutTime
         ), row.getNumber(), authenticatedUser.getUserId(), row.getAmount(), null);
         return getOrderDetail(authenticatedUser, orderId);
+    }
+
+    private UserOrderPaymentDataObject resolveOrCreatePayment(UserOrderDetailRow row,
+                                                              UserAuthenticatedUser authenticatedUser,
+                                                              LocalDateTime requestTime) {
+        UserOrderPaymentDataObject existingPayment = userOrderPersistenceMapper.findOrderPaymentByOrderId(row.getId());
+        if (existingPayment != null) {
+            return existingPayment;
+        }
+
+        UserOrderPaymentDataObject payment = buildOrderPayment(row, authenticatedUser, requestTime);
+        try {
+            userOrderPersistenceMapper.insertOrderPayment(payment);
+            return payment;
+        } catch (DuplicateKeyException ex) {
+            UserOrderPaymentDataObject concurrentPayment = userOrderPersistenceMapper.findOrderPaymentByOrderId(row.getId());
+            if (concurrentPayment != null) {
+                return concurrentPayment;
+            }
+            throw ex;
+        }
+    }
+
+    private void markPaymentSucceededIfNecessary(UserOrderPaymentDataObject payment, LocalDateTime paidTime) {
+        if (payment == null || payment.getId() == null) {
+            throw new ApplicationException(com.shelfflow.services.common.api.ErrorCode.CONFLICT, "支付记录不存在");
+        }
+        if (UserOrderPaymentStatus.fromLegacy(payment.getStatus()) == UserOrderPaymentStatus.SUCCEEDED) {
+            return;
+        }
+        int affectedRows = userOrderPersistenceMapper.markOrderPaymentSucceeded(
+                payment.getId(),
+                UserOrderPaymentStatus.SUCCEEDED.legacyValue(),
+                paidTime,
+                paidTime
+        );
+        if (affectedRows <= 0) {
+            UserOrderPaymentDataObject latestPayment = userOrderPersistenceMapper.findOrderPaymentByOrderId(payment.getOrderId());
+            if (latestPayment == null
+                    || UserOrderPaymentStatus.fromLegacy(latestPayment.getStatus()) != UserOrderPaymentStatus.SUCCEEDED) {
+                throw new ApplicationException(com.shelfflow.services.common.api.ErrorCode.CONFLICT, "支付状态更新失败，请刷新后重试");
+            }
+        }
+    }
+
+    private UserOrderPaymentDataObject buildOrderPayment(UserOrderDetailRow row,
+                                                         UserAuthenticatedUser authenticatedUser,
+                                                         LocalDateTime requestTime) {
+        UserOrderPaymentDataObject payment = new UserOrderPaymentDataObject();
+        payment.setPaymentNo(buildPaymentNo(row));
+        payment.setOrderId(row.getId());
+        payment.setOrderNumber(row.getNumber());
+        payment.setUserId(authenticatedUser.getUserId());
+        payment.setAmount(row.getAmount());
+        payment.setPayMethod(row.getPayMethod() == null ? userOrderProperties.getDefaultPayMethod() : row.getPayMethod());
+        payment.setProvider(DEFAULT_PAYMENT_PROVIDER);
+        payment.setStatus(UserOrderPaymentStatus.PENDING.legacyValue());
+        payment.setIdempotencyKey(buildPaymentIdempotencyKey(authenticatedUser.getUserId(), row.getId()));
+        payment.setRequestTime(requestTime);
+        payment.setPaidTime(null);
+        payment.setCreateTime(requestTime);
+        payment.setUpdateTime(requestTime);
+        return payment;
+    }
+
+    private String buildPaymentNo(UserOrderDetailRow row) {
+        String orderNumber = row.getNumber() == null ? String.valueOf(row.getId()) : row.getNumber();
+        return PAYMENT_NO_PREFIX + orderNumber;
+    }
+
+    private String buildPaymentIdempotencyKey(Long userId, Long orderId) {
+        return PAYMENT_IDEMPOTENCY_PREFIX
+                + PAYMENT_IDEMPOTENCY_SEPARATOR
+                + userId
+                + PAYMENT_IDEMPOTENCY_SEPARATOR
+                + orderId;
     }
 
     private void insertAndPublishOrderEvent(UserOrderEventDataObject event,

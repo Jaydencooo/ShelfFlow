@@ -19,6 +19,7 @@ public class UserOrderDetailRow {
     private String pickupCode;
     private LocalDateTime orderTime;
     private LocalDateTime checkoutTime;
+    private Integer payMethod;
     private LocalDateTime pickupDeadline;
     private LocalDateTime cancelTime;
     private String cancelReason;

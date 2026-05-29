@@ -175,3 +175,24 @@ CREATE TABLE order_event_log (
     note VARCHAR(255),
     create_time TIMESTAMP NOT NULL
 );
+
+CREATE TABLE user_order_payment (
+    id BIGINT PRIMARY KEY AUTO_INCREMENT,
+    payment_no VARCHAR(64) NOT NULL,
+    order_id BIGINT NOT NULL,
+    order_number VARCHAR(50) NOT NULL,
+    user_id BIGINT NOT NULL,
+    amount DECIMAL(10, 2) NOT NULL,
+    pay_method INT NOT NULL,
+    provider VARCHAR(32) NOT NULL,
+    status INT NOT NULL,
+    idempotency_key VARCHAR(128) NOT NULL,
+    request_time TIMESTAMP NOT NULL,
+    paid_time TIMESTAMP,
+    create_time TIMESTAMP NOT NULL,
+    update_time TIMESTAMP NOT NULL
+);
+
+CREATE UNIQUE INDEX uk_user_order_payment_no ON user_order_payment(payment_no);
+CREATE UNIQUE INDEX uk_user_order_payment_order ON user_order_payment(order_id);
+CREATE UNIQUE INDEX uk_user_order_payment_idempotency ON user_order_payment(idempotency_key);

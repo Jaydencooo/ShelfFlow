@@ -1,0 +1,21 @@
+CREATE TABLE IF NOT EXISTS `user_order_payment` (
+  `id` bigint NOT NULL AUTO_INCREMENT COMMENT '主键',
+  `payment_no` varchar(64) NOT NULL COMMENT '支付流水号',
+  `order_id` bigint NOT NULL COMMENT '订单 ID',
+  `order_number` varchar(50) NOT NULL COMMENT '订单号',
+  `user_id` bigint NOT NULL COMMENT '用户 ID',
+  `amount` decimal(10,2) NOT NULL COMMENT '支付金额',
+  `pay_method` int NOT NULL COMMENT '支付方式',
+  `provider` varchar(32) NOT NULL DEFAULT 'mock' COMMENT '支付渠道',
+  `status` tinyint NOT NULL DEFAULT 0 COMMENT '支付单状态 0处理中 1成功 2失败',
+  `idempotency_key` varchar(128) NOT NULL COMMENT '幂等键',
+  `request_time` datetime NOT NULL COMMENT '支付请求时间',
+  `paid_time` datetime DEFAULT NULL COMMENT '支付成功时间',
+  `create_time` datetime NOT NULL COMMENT '创建时间',
+  `update_time` datetime NOT NULL COMMENT '更新时间',
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_user_order_payment_no` (`payment_no`),
+  UNIQUE KEY `uk_user_order_payment_order` (`order_id`),
+  UNIQUE KEY `uk_user_order_payment_idempotency` (`idempotency_key`),
+  KEY `idx_user_order_payment_user_time` (`user_id`, `request_time`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='用户订单支付单';

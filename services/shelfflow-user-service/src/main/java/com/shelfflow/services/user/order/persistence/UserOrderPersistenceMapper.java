@@ -7,6 +7,7 @@ import com.shelfflow.services.user.order.persistence.dataobject.UserOrderDetailD
 import com.shelfflow.services.user.order.persistence.dataobject.UserOrderEventDataObject;
 import com.shelfflow.services.user.order.persistence.dataobject.UserOrderItemRow;
 import com.shelfflow.services.user.order.persistence.dataobject.UserOrderPageCriteria;
+import com.shelfflow.services.user.order.persistence.dataobject.UserOrderPaymentDataObject;
 import com.shelfflow.services.user.order.persistence.dataobject.UserOrderSummaryRow;
 import com.shelfflow.services.user.order.persistence.dataobject.UserOrderTimeoutCandidateRow;
 import org.apache.ibatis.annotations.Mapper;
@@ -46,6 +47,15 @@ public interface UserOrderPersistenceMapper {
     List<UserOrderEventDataObject> listOrderEventsByOrderId(@Param("orderId") Long orderId);
 
     UserOrderDetailRow findOrderByIdAndUserId(@Param("id") Long id, @Param("userId") Long userId);
+
+    UserOrderPaymentDataObject findOrderPaymentByOrderId(@Param("orderId") Long orderId);
+
+    void insertOrderPayment(UserOrderPaymentDataObject payment);
+
+    int markOrderPaymentSucceeded(@Param("id") Long id,
+                                  @Param("status") Integer status,
+                                  @Param("paidTime") LocalDateTime paidTime,
+                                  @Param("updateTime") LocalDateTime updateTime);
 
     List<UserOrderTimeoutCandidateRow> listTimeoutCloseCandidates(@Param("deadline") LocalDateTime deadline,
                                                                   @Param("status") Integer status,
