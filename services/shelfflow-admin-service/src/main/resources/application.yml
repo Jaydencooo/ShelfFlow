@@ -10,6 +10,12 @@ spring:
     password: ${REDIS_PASSWORD:}
     database: ${REDIS_DATABASE:1}
     timeout: ${REDIS_TIMEOUT_MS:2000}
+  rabbitmq:
+    host: ${RABBITMQ_HOST:127.0.0.1}
+    port: ${RABBITMQ_PORT:5672}
+    username: ${RABBITMQ_DEFAULT_USER:guest}
+    password: ${RABBITMQ_DEFAULT_PASS:guest}
+    virtual-host: ${RABBITMQ_VIRTUAL_HOST:/}
   datasource:
     url: jdbc:mysql://${DB_HOST:127.0.0.1}:${DB_PORT:3306}/${DB_NAME:shelfflow}?useUnicode=true&characterEncoding=UTF-8&serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true
     username: ${DB_USER:root}
@@ -67,6 +73,15 @@ shelfflow:
       redis-key-prefix: ${STOREFRONT_CATALOG_CACHE_REDIS_KEY_PREFIX:shelfflow:storefront:catalog}
       scan-count: ${ADMIN_STOREFRONT_CACHE_SCAN_COUNT:200}
       fail-open: ${ADMIN_STOREFRONT_CACHE_FAIL_OPEN:true}
+    order-events:
+      consumer:
+        enabled: ${ADMIN_ORDER_EVENTS_CONSUMER_ENABLED:false}
+        exchange: ${USER_ORDER_EVENTS_EXCHANGE:shelfflow.order.events}
+        queue: ${ADMIN_ORDER_EVENTS_CONSUMER_QUEUE:shelfflow.admin.order-events.inbox}
+        routing-key: ${ADMIN_ORDER_EVENTS_CONSUMER_ROUTING_KEY:shelfflow.order.*}
+        durable-exchange: ${ADMIN_ORDER_EVENTS_CONSUMER_DURABLE_EXCHANGE:true}
+        durable-queue: ${ADMIN_ORDER_EVENTS_CONSUMER_DURABLE_QUEUE:true}
+        fail-fast: ${ADMIN_ORDER_EVENTS_CONSUMER_FAIL_FAST:true}
   sentinel:
     enabled: ${SHELFFLOW_SENTINEL_ENABLED:false}
     flow-rules:

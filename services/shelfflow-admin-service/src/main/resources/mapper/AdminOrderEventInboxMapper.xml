@@ -1,0 +1,101 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd" >
+
+<mapper namespace="com.shelfflow.services.admin.orderevent.persistence.AdminOrderEventInboxPersistenceMapper">
+
+    <insert id="insert" parameterType="com.shelfflow.services.admin.orderevent.persistence.dataobject.AdminOrderEventInboxDataObject"
+            useGeneratedKeys="true" keyProperty="id">
+        insert into admin_order_event_inbox(
+            event_id, message_id, order_id, order_number, user_id, event_type, actor_type, actor_id,
+            from_status, to_status, from_pay_status, to_pay_status, total_amount, item_count, note,
+            routing_key, status, retry_count, failure_reason, event_time, received_time, processed_time,
+            create_time, update_time
+        )
+        values(
+            #{eventId}, #{messageId}, #{orderId}, #{orderNumber}, #{userId}, #{eventType}, #{actorType}, #{actorId},
+            #{fromStatus}, #{toStatus}, #{fromPayStatus}, #{toPayStatus}, #{totalAmount}, #{itemCount}, #{note},
+            #{routingKey}, #{status}, #{retryCount}, #{failureReason}, #{eventTime}, #{receivedTime}, #{processedTime},
+            #{createTime}, #{updateTime}
+        )
+    </insert>
+
+    <select id="findByEventId" resultType="com.shelfflow.services.admin.orderevent.persistence.dataobject.AdminOrderEventInboxDataObject">
+        select <include refid="BaseColumns"/>
+        from admin_order_event_inbox
+        where event_id = #{eventId}
+    </select>
+
+    <update id="markProcessed">
+        update admin_order_event_inbox
+        set status = 'PROCESSED',
+            processed_time = #{processedTime},
+            failure_reason = null,
+            update_time = #{updateTime}
+        where id = #{id}
+    </update>
+
+    <update id="markFailed">
+        update admin_order_event_inbox
+        set status = 'FAILED',
+            retry_count = retry_count + 1,
+            failure_reason = #{failureReason},
+            update_time = #{updateTime}
+        where id = #{id}
+    </update>
+
+    <select id="page" resultType="com.shelfflow.services.admin.orderevent.persistence.dataobject.AdminOrderEventInboxDataObject">
+        select <include refid="BaseColumns"/>
+        from admin_order_event_inbox
+        <include refid="WhereClause"/>
+        order by received_time desc, id desc
+        limit #{pageSize} offset #{offset}
+    </select>
+
+    <select id="count" resultType="long">
+        select count(1)
+        from admin_order_event_inbox
+        <include refid="WhereClause"/>
+    </select>
+
+    <sql id="WhereClause">
+        where 1 = 1
+        <if test="orderNumber != null">
+            and order_number like concat('%', #{orderNumber}, '%')
+        </if>
+        <if test="eventType != null">
+            and event_type = #{eventType}
+        </if>
+        <if test="status != null">
+            and status = #{status}
+        </if>
+    </sql>
+
+    <sql id="BaseColumns">
+        id,
+        event_id as eventId,
+        message_id as messageId,
+        order_id as orderId,
+        order_number as orderNumber,
+        user_id as userId,
+        event_type as eventType,
+        actor_type as actorType,
+        actor_id as actorId,
+        from_status as fromStatus,
+        to_status as toStatus,
+        from_pay_status as fromPayStatus,
+        to_pay_status as toPayStatus,
+        total_amount as totalAmount,
+        item_count as itemCount,
+        note,
+        routing_key as routingKey,
+        status,
+        retry_count as retryCount,
+        failure_reason as failureReason,
+        event_time as eventTime,
+        received_time as receivedTime,
+        processed_time as processedTime,
+        create_time as createTime,
+        update_time as updateTime
+    </sql>
+</mapper>

@@ -25,6 +25,7 @@
 - `GET /api/admin/orders/{id}` 管理端订单详情
 - `POST /api/admin/orders/{id}/status` 管理端订单履约状态流转
 - `POST /api/admin/orders/{id}/pickup-verification` 管理端按自提码核销订单
+- `GET /api/admin/order-event-inbox` 管理端订单事件 inbox 分页，可按订单号、事件类型和消费状态筛选
 - `GET /api/admin/pricing-rules` 定价规则分页
 - `GET /api/admin/pricing-rules/{id}` 定价规则详情
 - `POST /api/admin/pricing-rules` 新增定价规则

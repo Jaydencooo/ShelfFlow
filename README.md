@@ -44,7 +44,7 @@ ShelfFlow/
 - **库存并发保护**：用户下单支持可选 Redis Lua 原子预占，数据库条件更新仍作为最终一致性防线。
 - **高频目录缓存**：用户端商品目录和分类支持可选 Redis 缓存，管理端商品、批次、定价变更后统一失效，避免前台读取旧数据。
 - **支付幂等模型**：用户支付会生成订单级支付单和幂等键，支持签名校验的支付回调幂等确认，重复支付或重复回调复用既有结果。
-- **事件驱动扩展**：用户订单支持可选 RabbitMQ 领域事件发布，事务提交后异步通知下游履约、分析或消息模块。
+- **事件驱动扩展**：用户订单支持可选 RabbitMQ 领域事件发布，管理端可通过 inbox 幂等消费订单事件，承接履约、分析和审计扩展。
 - **订单自动治理**：支持可配置未支付超时关单，自动取消订单、释放库存并沉淀审计事件。
 
 ## 核心模块职责
@@ -52,7 +52,7 @@ ShelfFlow/
 - **Admin Web**：商品/分类/批次管理、定价规则、自提点、订单履约、经营分析、操作日志、AI 运营助手。
 - **User Web**：商城首页、商品筛选、购物车、注册登录、验证码、个人资料、自提信息、订单列表与详情。
 - **Auth Service**：管理端登录认证和会话签发。
-- **Admin Service**：运营后台业务，包括商品库存、订单流转、自提核销、AI 建议、操作日志和经营指标。
+- **Admin Service**：运营后台业务，包括商品库存、订单流转、自提核销、订单事件 inbox、AI 建议、操作日志和经营指标。
 - **User Service**：用户侧业务，包括账号注册、登录、验证码、商品目录、购物车、下单、支付、自提点查询。
 - **Gateway**：统一入口、路由转发、跨域边界、Nacos 服务名路由和 Sentinel 网关保护。
 - **Migration Service**：执行 Flyway 数据库迁移，沉淀基础结构和增量变更。
@@ -199,6 +199,20 @@ USER_CATALOG_CACHE_PRODUCTS_TTL_SECONDS=60
 ```
 
 默认不开启，避免本地未启动 Redis 时影响基础启动；开启后 Redis 异常默认 fail-open，主链路仍回落数据库。
+
+## 可选开启订单事件链路
+
+用户端订单服务可在事务提交后发布 RabbitMQ 领域事件，管理端可开启 inbox 消费并按 `eventId` 幂等入库，便于后续扩展履约排队、通知、经营分析实时聚合和风控审计。
+
+```text
+USER_ORDER_EVENTS_ENABLED=true
+ADMIN_ORDER_EVENTS_CONSUMER_ENABLED=true
+USER_ORDER_EVENTS_EXCHANGE=shelfflow.order.events
+ADMIN_ORDER_EVENTS_CONSUMER_QUEUE=shelfflow.admin.order-events.inbox
+ADMIN_ORDER_EVENTS_CONSUMER_ROUTING_KEY=shelfflow.order.*
+```
+
+默认不开启，避免本地未启动 RabbitMQ 时影响基础启动。
 
 ## 启动前端
 

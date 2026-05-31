@@ -188,3 +188,31 @@ CREATE TABLE admin_operation_log (
     summary VARCHAR(255) NOT NULL,
     create_time TIMESTAMP NOT NULL
 );
+
+CREATE TABLE admin_order_event_inbox (
+    id BIGINT PRIMARY KEY AUTO_INCREMENT,
+    event_id BIGINT NOT NULL UNIQUE,
+    message_id VARCHAR(80),
+    order_id BIGINT NOT NULL,
+    order_number VARCHAR(64),
+    user_id BIGINT,
+    event_type VARCHAR(32) NOT NULL,
+    actor_type VARCHAR(16),
+    actor_id BIGINT,
+    from_status INT,
+    to_status INT,
+    from_pay_status INT,
+    to_pay_status INT,
+    total_amount DECIMAL(10, 2),
+    item_count INT,
+    note VARCHAR(255),
+    routing_key VARCHAR(128),
+    status VARCHAR(16) NOT NULL,
+    retry_count INT NOT NULL DEFAULT 0,
+    failure_reason VARCHAR(512),
+    event_time TIMESTAMP,
+    received_time TIMESTAMP NOT NULL,
+    processed_time TIMESTAMP,
+    create_time TIMESTAMP NOT NULL,
+    update_time TIMESTAMP NOT NULL
+);
