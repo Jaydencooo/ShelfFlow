@@ -42,6 +42,12 @@ public class UserOrderProperties {
         private String routingKeyPrefix = "shelfflow.order";
         private boolean durableExchange = true;
         private boolean failFast;
+        private boolean outboxEnabled;
+        private long outboxInitialDelayMilliseconds = 60000;
+        private long outboxFixedDelayMilliseconds = 60000;
+        private int outboxBatchSize = 100;
+        private int outboxMaxAttempts = 5;
+        private long outboxRetryDelaySeconds = 60;
     }
 
     @Data

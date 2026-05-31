@@ -3,12 +3,14 @@ package com.shelfflow.services.user.order.messaging;
 import com.shelfflow.services.user.order.persistence.dataobject.UserOrderEventDataObject;
 import lombok.Builder;
 import lombok.Value;
+import lombok.extern.jackson.Jacksonized;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
 @Value
 @Builder
+@Jacksonized
 public class UserOrderEventMessage {
     Long eventId;
     Long orderId;

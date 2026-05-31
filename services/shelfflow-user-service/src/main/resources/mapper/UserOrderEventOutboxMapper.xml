@@ -1,0 +1,65 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd" >
+
+<mapper namespace="com.shelfflow.services.user.order.persistence.UserOrderEventOutboxPersistenceMapper">
+
+    <insert id="insert" parameterType="com.shelfflow.services.user.order.persistence.dataobject.UserOrderEventOutboxDataObject"
+            useGeneratedKeys="true" keyProperty="id">
+        insert into user_order_event_outbox(
+            event_id, message_id, exchange_name, routing_key, payload_json, status, attempt_count,
+            next_retry_time, last_error, published_time, create_time, update_time
+        )
+        values(
+            #{eventId}, #{messageId}, #{exchangeName}, #{routingKey}, #{payloadJson}, #{status}, #{attemptCount},
+            #{nextRetryTime}, #{lastError}, #{publishedTime}, #{createTime}, #{updateTime}
+        )
+    </insert>
+
+    <select id="listPendingDue" resultType="com.shelfflow.services.user.order.persistence.dataobject.UserOrderEventOutboxDataObject">
+        select <include refid="BaseColumns"/>
+        from user_order_event_outbox
+        where status in ('PENDING', 'FAILED')
+          and next_retry_time &lt;= #{now}
+          and attempt_count &lt; #{maxAttempts}
+        order by next_retry_time asc, id asc
+        limit #{limit}
+    </select>
+
+    <update id="markPublished">
+        update user_order_event_outbox
+        set status = 'PUBLISHED',
+            published_time = #{publishedTime},
+            last_error = null,
+            update_time = #{updateTime}
+        where id = #{id}
+          and status in ('PENDING', 'FAILED')
+    </update>
+
+    <update id="markFailed">
+        update user_order_event_outbox
+        set status = 'FAILED',
+            attempt_count = attempt_count + 1,
+            next_retry_time = #{nextRetryTime},
+            last_error = #{lastError},
+            update_time = #{updateTime}
+        where id = #{id}
+          and status in ('PENDING', 'FAILED')
+    </update>
+
+    <sql id="BaseColumns">
+        id,
+        event_id as eventId,
+        message_id as messageId,
+        exchange_name as exchangeName,
+        routing_key as routingKey,
+        payload_json as payloadJson,
+        status,
+        attempt_count as attemptCount,
+        next_retry_time as nextRetryTime,
+        last_error as lastError,
+        published_time as publishedTime,
+        create_time as createTime,
+        update_time as updateTime
+    </sql>
+</mapper>

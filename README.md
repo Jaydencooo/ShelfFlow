@@ -202,10 +202,11 @@ USER_CATALOG_CACHE_PRODUCTS_TTL_SECONDS=60
 
 ## 可选开启订单事件链路
 
-用户端订单服务可在事务提交后发布 RabbitMQ 领域事件，管理端可开启 inbox 消费并按 `eventId` 幂等入库，便于后续扩展履约排队、通知、经营分析实时聚合和风控审计。
+用户端订单服务可在事务提交后发布 RabbitMQ 领域事件，也可以开启 outbox，把事件先写入数据库再由后台任务投递；管理端可开启 inbox 消费并按 `eventId` 幂等入库，便于后续扩展履约排队、通知、经营分析实时聚合和风控审计。
 
 ```text
 USER_ORDER_EVENTS_ENABLED=true
+USER_ORDER_EVENTS_OUTBOX_ENABLED=true
 ADMIN_ORDER_EVENTS_CONSUMER_ENABLED=true
 USER_ORDER_EVENTS_EXCHANGE=shelfflow.order.events
 ADMIN_ORDER_EVENTS_CONSUMER_QUEUE=shelfflow.admin.order-events.inbox

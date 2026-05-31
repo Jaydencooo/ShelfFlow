@@ -25,14 +25,29 @@ public class UserOrderEventPublisher {
 
     private final RabbitTemplate rabbitTemplate;
     private final UserOrderProperties userOrderProperties;
+    private final UserOrderEventOutboxApplicationService outboxApplicationService;
 
-    public UserOrderEventPublisher(RabbitTemplate rabbitTemplate, UserOrderProperties userOrderProperties) {
+    public UserOrderEventPublisher(RabbitTemplate rabbitTemplate,
+                                   UserOrderProperties userOrderProperties,
+                                   UserOrderEventOutboxApplicationService outboxApplicationService) {
         this.rabbitTemplate = rabbitTemplate;
         this.userOrderProperties = userOrderProperties;
+        this.outboxApplicationService = outboxApplicationService;
     }
 
     public void publishAfterCommit(UserOrderEventMessage eventMessage) {
         if (!isEnabled() || eventMessage == null) {
+            return;
+        }
+
+        if (userOrderProperties.getEvents().isOutboxEnabled()) {
+            outboxApplicationService.enqueue(
+                    eventMessage,
+                    resolveMessageId(eventMessage),
+                    resolveExchange(),
+                    resolveRoutingKey(eventMessage.getEventType()),
+                    java.time.LocalDateTime.now()
+            );
             return;
         }
 
@@ -49,14 +64,16 @@ public class UserOrderEventPublisher {
         publish(eventMessage);
     }
 
+    public void publishOutboxMessage(UserOrderEventMessage eventMessage,
+                                     String messageId,
+                                     String exchange,
+                                     String routingKey) {
+        send(exchange, routingKey, eventMessage, messageId);
+    }
+
     private void publish(UserOrderEventMessage eventMessage) {
         try {
-            rabbitTemplate.convertAndSend(
-                    resolveExchange(),
-                    resolveRoutingKey(eventMessage.getEventType()),
-                    eventMessage,
-                    buildMessagePostProcessor(eventMessage)
-            );
+            send(resolveExchange(), resolveRoutingKey(eventMessage.getEventType()), eventMessage, resolveMessageId(eventMessage));
         } catch (AmqpException | IllegalStateException ex) {
             if (userOrderProperties.getEvents().isFailFast()) {
                 throw new ApplicationException(ErrorCode.DEPENDENCY_ERROR, "订单事件发布失败，请稍后重试");
@@ -68,9 +85,13 @@ public class UserOrderEventPublisher {
         }
     }
 
-    private MessagePostProcessor buildMessagePostProcessor(UserOrderEventMessage eventMessage) {
+    private void send(String exchange, String routingKey, UserOrderEventMessage eventMessage, String messageId) {
+        rabbitTemplate.convertAndSend(exchange, routingKey, eventMessage, buildMessagePostProcessor(eventMessage, messageId));
+    }
+
+    private MessagePostProcessor buildMessagePostProcessor(UserOrderEventMessage eventMessage, String messageId) {
         return (Message message) -> {
-            message.getMessageProperties().setMessageId(resolveMessageId(eventMessage));
+            message.getMessageProperties().setMessageId(messageId);
             message.getMessageProperties().setContentType("application/json");
             message.getMessageProperties().setType(eventMessage.getEventType());
             return message;

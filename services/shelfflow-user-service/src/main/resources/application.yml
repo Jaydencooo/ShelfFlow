@@ -113,6 +113,12 @@ shelfflow:
         routing-key-prefix: ${USER_ORDER_EVENTS_ROUTING_KEY_PREFIX:shelfflow.order}
         durable-exchange: ${USER_ORDER_EVENTS_DURABLE_EXCHANGE:true}
         fail-fast: ${USER_ORDER_EVENTS_FAIL_FAST:false}
+        outbox-enabled: ${USER_ORDER_EVENTS_OUTBOX_ENABLED:false}
+        outbox-initial-delay-milliseconds: ${USER_ORDER_EVENTS_OUTBOX_INITIAL_DELAY_MILLISECONDS:60000}
+        outbox-fixed-delay-milliseconds: ${USER_ORDER_EVENTS_OUTBOX_FIXED_DELAY_MILLISECONDS:60000}
+        outbox-batch-size: ${USER_ORDER_EVENTS_OUTBOX_BATCH_SIZE:100}
+        outbox-max-attempts: ${USER_ORDER_EVENTS_OUTBOX_MAX_ATTEMPTS:5}
+        outbox-retry-delay-seconds: ${USER_ORDER_EVENTS_OUTBOX_RETRY_DELAY_SECONDS:60}
       timeout-close:
         enabled: ${USER_ORDER_TIMEOUT_CLOSE_ENABLED:false}
         unpaid-timeout-minutes: ${USER_ORDER_TIMEOUT_CLOSE_UNPAID_TIMEOUT_MINUTES:30}

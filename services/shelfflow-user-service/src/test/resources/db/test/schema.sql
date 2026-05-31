@@ -176,6 +176,22 @@ CREATE TABLE order_event_log (
     create_time TIMESTAMP NOT NULL
 );
 
+CREATE TABLE user_order_event_outbox (
+    id BIGINT PRIMARY KEY AUTO_INCREMENT,
+    event_id BIGINT NOT NULL UNIQUE,
+    message_id VARCHAR(80) NOT NULL,
+    exchange_name VARCHAR(128) NOT NULL,
+    routing_key VARCHAR(128) NOT NULL,
+    payload_json CLOB NOT NULL,
+    status VARCHAR(16) NOT NULL,
+    attempt_count INT NOT NULL DEFAULT 0,
+    next_retry_time TIMESTAMP NOT NULL,
+    last_error VARCHAR(512),
+    published_time TIMESTAMP,
+    create_time TIMESTAMP NOT NULL,
+    update_time TIMESTAMP NOT NULL
+);
+
 CREATE TABLE user_order_payment (
     id BIGINT PRIMARY KEY AUTO_INCREMENT,
     payment_no VARCHAR(64) NOT NULL,
